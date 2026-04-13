@@ -3,9 +3,18 @@ use std::sync::Arc;
 
 use tauri::State;
 
-use crate::app::preview::{ComrakStubBackend, RenderPreviewResult};
 use crate::app::project::ProjectContext;
 use crate::app::state::SharedProject;
+
+#[tauri::command]
+pub async fn workspace_get_path(state: State<'_, SharedProject>) -> Result<Option<String>, String> {
+    Ok(state
+        .0
+        .lock()
+        .await
+        .as_ref()
+        .map(|c| c.workspace_root().to_string_lossy().into_owned()))
+}
 
 #[tauri::command]
 pub async fn workspace_open(state: State<'_, SharedProject>, path: String) -> Result<(), String> {
@@ -19,10 +28,4 @@ pub async fn workspace_open(state: State<'_, SharedProject>, path: String) -> Re
     let mut guard = state.0.lock().await;
     *guard = Some(Arc::new(ctx));
     Ok(())
-}
-
-#[tauri::command]
-pub fn preview_render(content: String, snapshot_id: Option<String>) -> RenderPreviewResult {
-    let id = snapshot_id.unwrap_or_else(|| "editor-buffer".to_owned());
-    ComrakStubBackend::render(&content, id)
 }

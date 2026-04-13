@@ -37,6 +37,14 @@ sea-orm = { version = "1.1", features = [
 ] }
 migration = { path = "./migration" }
 comrak = "0.26"
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["clock"] }
+agentool = { path = "crates/agent-tools" }
+lmkit = { path = "crates/lmkit-rs", default-features = false, features = [
+  "openai",
+  "chat",
+] }
+async-trait = "0.1"
 
 [features]
 default = ["custom-protocol"]

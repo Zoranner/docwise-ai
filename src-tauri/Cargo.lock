@@ -1148,7 +1148,11 @@ dependencies = [
 name = "docwise-tauri"
 version = "0.1.0"
 dependencies = [
+ "agentool",
+ "async-trait",
+ "chrono",
  "comrak",
+ "lmkit",
  "migration",
  "sea-orm",
  "serde",
@@ -1156,6 +1160,7 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tokio",
+ "uuid",
 ]
 
 [[package]]

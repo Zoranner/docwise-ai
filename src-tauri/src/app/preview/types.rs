@@ -13,15 +13,7 @@ pub struct RenderPreviewResult {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Diagnostic {
-    pub level: DiagnosticLevel,
+    /// `"warning"` | `"error"`，与后续 Mdweave 诊断对齐。
+    pub level: String,
     pub message: String,
-}
-
-/// 预留与 `MdweaveBackend` 诊断对齐；`ComrakStubBackend` 当前不产出诊断。
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-#[allow(dead_code)]
-pub enum DiagnosticLevel {
-    Warning,
-    Error,
 }

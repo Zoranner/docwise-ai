@@ -5,13 +5,15 @@ use sea_orm::{ConnectionTrait, Database, DatabaseConnection, DbBackend, DbErr, S
 
 /// 工作区 `.agent/project.db` 连接与崩溃恢复。
 pub struct ProjectContext {
-    /// 工作区根路径；后续 fs / 预览路径解析使用。
-    #[allow(dead_code)]
-    pub workspace_root: PathBuf,
+    workspace_root: PathBuf,
     pub db: DatabaseConnection,
 }
 
 impl ProjectContext {
+    pub fn workspace_root(&self) -> &Path {
+        &self.workspace_root
+    }
+
     pub async fn open(workspace_root: PathBuf) -> Result<Self, DbErr> {
         let agent_dir = workspace_root.join(".agent");
         tokio::fs::create_dir_all(&agent_dir)
