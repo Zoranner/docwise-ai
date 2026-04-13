@@ -1,1 +1,6 @@
 .refs
+node_modules/
+dist/
+src-tauri/target/
+*.log
+icons/source.png

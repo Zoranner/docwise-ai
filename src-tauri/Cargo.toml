@@ -1,0 +1,43 @@
+[workspace]
+resolver = "2"
+members = ["crates/agent-tools", "crates/lmkit-rs", "migration"]
+default-members = ["."]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+
+[package]
+name = "docwise-tauri"
+version.workspace = true
+edition.workspace = true
+description = "Docwise desktop shell (Tauri)"
+publish = false
+
+[lib]
+name = "docwise_tauri"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "docwise"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["fs", "macros", "rt-multi-thread"] }
+sea-orm = { version = "1.1", features = [
+  "sqlx-sqlite",
+  "runtime-tokio-rustls",
+  "macros",
+] }
+migration = { path = "./migration" }
+comrak = "0.26"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
