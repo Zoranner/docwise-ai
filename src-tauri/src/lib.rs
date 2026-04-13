@@ -1,5 +1,9 @@
 mod app;
 
+pub use app::execution::{
+    merge_planner_tool_list, run_planning_turn, tools_by_name, PlanningAgentError,
+    PlanningLoopConfig, PlanningTurnResult,
+};
 pub use app::project::tools::{
     definitions_for_lmkit, executor_project_tools, planner_project_tools, preview_render_tool,
 };
