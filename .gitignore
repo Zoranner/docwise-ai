@@ -1,6 +1,8 @@
 .refs
 node_modules/
 dist/
+.nuxt/
+.output/
 src-tauri/target/
 *.log
 icons/source.png

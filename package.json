@@ -3,17 +3,30 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "tauri": "tauri"
+    "postinstall": "nuxt prepare",
+    "format": "prettier --write .",
+    "lint": "bunx --bun eslint .",
+    "lint:fix": "bunx --bun eslint . --fix",
+    "fix": "prettier --write . && bunx --bun eslint . --fix",
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "generate": "nuxt generate",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2"
+    "@nuxt/ui": "^4.0.0",
+    "@tauri-apps/api": "^2",
+    "nuxt": "^4.0.0",
+    "tailwindcss": "^4.1.0",
+    "vue": "^3.5.0"
   },
   "devDependencies": {
+    "@nuxt/eslint": "^1.9.0",
     "@tauri-apps/cli": "^2",
-    "typescript": "~5.7.0",
-    "vite": "^6.0.0"
+    "eslint": "^9.0.0",
+    "eslint-config-prettier": "^10.0.0",
+    "prettier": "^3.4.0",
+    "typescript": "~5.7.0"
   }
 }

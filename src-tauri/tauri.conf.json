@@ -5,9 +5,9 @@
   "identifier": "com.zoranner.docwise",
   "build": {
     "beforeDevCommand": "bun run dev",
-    "beforeBuildCommand": "bun run build",
-    "devUrl": "http://localhost:5173",
-    "frontendDist": "../dist"
+    "beforeBuildCommand": "bun run generate",
+    "devUrl": "http://localhost:3000",
+    "frontendDist": "../.output/public"
   },
   "app": {
     "windows": [
