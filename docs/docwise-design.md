@@ -5,7 +5,7 @@
 | 状态 | 定稿 |
 | 文档类型 | 产品与应用架构设计 |
 | 关联文档 | [`mdweave-design.md`](./mdweave-design.md)：文档预览与导出工具链 |
-| 底层依赖 | `src-tauri/crates/agent-tools`（工具集）、`src-tauri/crates/lmkit-rs`（模型调用）；任务模型在 Docwise 内部规划，成熟后抽象回 agentool |
+| 底层依赖 | `src-tauri/crates/agent-tools`（工具集）、`src-tauri/crates/lmkit-rs`（模型调用）；任务模型在 Docwise 内部规划，成熟后抽象回 agentool；`project.db` 通过 `sea-orm` 访问，迁移用 `sea-orm-migration` |
 
 ---
 
@@ -31,7 +31,7 @@ Docwise 是一个桌面应用，帮助用户建立和维护 Markdown 文档体�
 
 ### 这个场景做什么
 
-用户在对话框中描述需求，规划对话智能体理解需求后，通过调用 blueprint 工具集将需求结构化为蓝图。整个过程是一个来回沟通的对话，蓝图在对话中逐步成形，而不是用户填写表单。
+用户在对话框中描述需求，规划对话智能体理解需求后，通过调用 project 工具集中的蓝图工具将需求结构化为蓝图。整个过程是一个来回沟通的对话，蓝图在对话中逐步成形，而不是用户填写表单。
 
 ### 涉及的概念
 
@@ -139,7 +139,7 @@ draft ──approve──→ approved ──开始生成任务──→ active
 
 ### 数据存储
 
-蓝图存储在工作区 `.agent/blueprints.db`，由 `src-tauri/src/app/blueprint/` 模块维护。该模块同时实现 blueprint 工具集，注册给规划对话智能体调用（详见"Docwise 内置工具集"章节）。`agentool` 不包含蓝图表。
+蓝图存储在工作区 `.agent/project.db`，由 `src-tauri/src/app/project/` 模块维护。该模块同时实现 project 工具集中的蓝图工具，注册给规划对话智能体调用（详见"Docwise 内置工具集"章节）。`agentool` 不包含蓝图表。
 
 ```sql
 CREATE TABLE IF NOT EXISTS blueprints (
@@ -181,7 +181,7 @@ CREATE TABLE IF NOT EXISTS blueprint_items (
 **Task（任务）**
 智能体需要完成的一项具体工作。任务结构为**树状**：一个父任务可以拆解为多个子任务，子任务可以继续拆解。兄弟任务可以并行执行，互不阻塞。任务有明确的目标（`goal`）和验收标准（`acceptance`）。
 
-> 任务存储在 Docwise `tasks/` 模块内实现，支持 `parent_id` 树状结构。详见"任务模型说明"章节。
+> 任务存储在 Docwise `project/` 模块内实现，支持 `parent_id` 树状结构和 `blueprint_item_id` 关联。详见"项目模型说明"章节。
 
 **TaskStep（任务步骤）**
 任务内部的线性执行步骤，例如"收集资料 → 起草大纲 → 撰写正文 → 校对"。v1 不支持步骤间的依赖图，只支持顺序执行。
@@ -190,7 +190,7 @@ CREATE TABLE IF NOT EXISTS blueprint_items (
 任务的一次具体执行记录，包含开始时间、结束时间、执行状态、错误信息和摘要。一个任务可以有多次 run（例如失败后重试）。
 
 **Snapshot（文件历史快照）**
-`agentool::fs` 在每次写操作（`write`、`edit`、`delete`、`move`、`copy`）执行前自动创建的不可变快照，按文件内容 SHA-256 去重存储。智能体可通过 `fs.get_snapshot` / `fs.list_snapshots` 查阅历史内容或在出错时恢复，无需手动触发。
+`agentool::fs` 在每次写操作（`file_write`、`file_edit`、`file_delete`、`file_move`、`file_copy`）执行前自动创建的不可变快照，按文件内容 SHA-256 去重存储。智能体可通过 `fs.snapshot_get` / `fs.snapshot_list` 查阅历史内容或在出错时恢复，无需手动触发。
 
 **PathLock（路径写锁）**
 任务执行时对目标文件加的写锁，防止两个任务同时写同一个文件。v1 规定同一文件在任意时刻最多只有一个处于 `running` 状态的写任务。
@@ -222,7 +222,7 @@ CREATE TABLE IF NOT EXISTS blueprint_items (
    │   ├── ToolCallDelta → 合并为 ToolCall（merge_tool_call_deltas）
    │   └── Finish → 判断结束原因
    ├── 执行工具调用（agentool 工具集）
-   │   ├── 写文件（fs 工具，写前自动快照）
+   │   ├── 写文件（`file_write`/`file_edit` 等，写前自动快照）
    │   ├── 读文件、搜索（find/fs 工具）
    │   └── 任务状态更新（task 工具）
    └── 循环直到 finish_reason = Stop 且无待处理工具调用
@@ -263,27 +263,31 @@ backlog ──调度──→ ready ──开始执行──→ running
 
 ### 崩溃恢复
 
-应用启动时，`tasks/` 模块的 `TaskContext::new` 会自动执行恢复：
+应用启动时，`project/` 模块的 `ProjectContext::new` 会自动执行恢复：
 - 遗留 `running` 状态的任务 → 改为 `blocked`，`blocked_reason = process_restart`
 - 遗留 `running` 状态的 run → 改为 `failed`，`error = process_restart`
 - 删除已过期的 `path_locks` 行
 
 ### 数据存储
 
-任务数据存储在工作区 `.agent/tasks.db`，由 Docwise `src-tauri/src/app/tasks/` 模块维护。该模块同时实现 task 工具集，注册给规划对话智能体和文档执行智能体调用（详见"Docwise 内置工具集"章节）。
+任务数据存储在工作区 `.agent/project.db`，由 Docwise `src-tauri/src/app/project/` 模块维护。该模块同时实现 project 工具集中的任务工具，注册给规划对话智能体和文档执行智能体调用（详见"Docwise 内置工具集"章节）。
 
-核心表结构（完整 DDL 见 `src-tauri/src/app/tasks/db.rs`）：
+核心表结构（完整迁移见 `src-tauri/src/app/project/migration/`）：
 
 | 表 | 用途 |
 |----|------|
-| `tasks` | 任务主行：目标、状态、优先级、标签、错误信息等 |
+| `blueprints` | 蓝图主行：目标、受众、风格约束、状态等 |
+| `blueprint_items` | 蓝图条目：目标文件路径、要求、约束 |
+| `tasks` | 任务主行：目标、状态、优先级、`parent_id`、`blueprint_item_id` 等 |
 | `task_steps` | 线性步骤（`seq` + `title` + `status`） |
 | `task_runs` | 执行实例：开始/结束时间、状态、摘要、错误 |
 | `path_locks` | 路径写锁：`path` UNIQUE，可选 `expires_at` |
 | `checkpoints` | 检查点（见场景三） |
 | `artifacts` | 产出物：类型、路径、可选内容 |
 
-Snapshot 存储在独立的 `.agent/snapshots.db`（元数据）和 `.agent/snapshots/<sha256>.md`（内容文件），由 `agentool::fs` 在每次写操作（`write`、`edit`、`delete`、`move`、`copy`）执行前自动创建，无需智能体显式调用：
+`tasks.blueprint_item_id` 外键引用 `blueprint_items(id)`，通过 join 可推导出所属蓝图。`parent_id IS NULL` 的根任务直接对应一个蓝图条目；子任务通过树状结构隐式归属。
+
+Snapshot 存储在独立的 `.agent/snapshots.db`（元数据）和 `.agent/snapshots/<sha256>.md`（内容文件），由 `agentool::fs` 在每次写操作（`file_write`、`file_edit`、`file_delete`、`file_move`、`file_copy`）执行前自动创建，无需智能体显式调用：
 
 ```sql
 CREATE TABLE IF NOT EXISTS snapshots (
@@ -302,11 +306,14 @@ CREATE TABLE IF NOT EXISTS snapshots (
 
 **fs**（`feature = "fs"`）**——文件操作**
 
-`read_file`、`write_file`、`edit_file`（精确替换）、`create_directory`、`list_directory`、`delete_file`、`move_file`、`copy_file`、`get_snapshot`、`list_snapshots`
+`file_read`、`file_write`、`file_edit`（精确替换）、`directory_create`、`directory_list`、`file_delete`、`file_move`、`file_copy`、`snapshot_get`、`snapshot_list`（后两者待实现）
 
 **find**（`feature = "find"`）**——搜索**
 
-文件名搜索、内容搜索（glob 与正则）
+| 工具 | 说明 |
+|------|------|
+| `grep_search` | 正则搜索文件内容，支持 glob 过滤和大小写忽略 |
+| `glob_search` | 按 glob 模式列出匹配文件路径 |
 
 **web**（`feature = "web"`）**——网络**
 
@@ -323,8 +330,11 @@ CREATE TABLE IF NOT EXISTS snapshots (
 | `git_diff` | 查看未暂存或已暂存的 diff |
 | `git_commit` | 暂存并提交（可指定文件列表或全量提交） |
 | `git_log` | 查看最近提交历史 |
-
-> **缺口**：当前 git 工具集不包含 worktree 操作（`git worktree add/remove/list`）。若需要"执行沙箱"（智能体在独立分支工作，完成后合并），需要 `agentool::git` 补充 worktree 工具，或由 Docwise 应用层直接调用 `git2` crate 处理。此项为 v1 后演进需求，已记录待 agentool 维护团队跟进。
+| `worktree_add` | 创建新的关联 worktree，分支不存在时从 HEAD 创建 |
+| `worktree_list` | 列出所有关联 worktree 及其路径和锁定状态 |
+| `worktree_remove` | 删除关联 worktree，`force: true` 可强制删除已锁定的 |
+| `worktree_lock` | 锁定 worktree，防止意外删除 |
+| `worktree_unlock` | 解锁已锁定的 worktree |
 
 **md**（`feature = "md"`）**——Markdown 分析**
 
@@ -400,7 +410,7 @@ CREATE TABLE IF NOT EXISTS snapshots (
             [architecture.md 节点恢复 running]
 
 执行智能体A：明白，开始写作
-            [时间轴：write_file（自动快照）→ git_commit]
+            [时间轴：file_write（自动快照）→ git_commit]
 ```
 
 ### 触发检查点的条件
@@ -417,7 +427,7 @@ CREATE TABLE IF NOT EXISTS snapshots (
 
 ### 检查点状态机
 
-检查点状态仍存储在 `tasks.db` 的 `checkpoints` 表，但触发和关闭都通过对话框消息驱动：
+检查点状态仍存储在 `project.db` 的 `checkpoints` 表，但触发和关闭都通过对话框消息驱动：
 
 ```
 open（智能体 @ 用户，标记等待）
@@ -492,11 +502,10 @@ pub struct Diagnostic {
 | 模块 | 职责 | 读写 | 依赖 |
 |------|------|------|------|
 | `workspace/` | 打开工作区、读写文件、管理 FileBuffer | 工作区文件系统 | — |
-| `blueprint/` | 蓝图 CRUD、蓝图状态机；实现并注册 blueprint 工具集供规划对话智能体调用 | `.agent/blueprints.db` | — |
-| `tasks/` | 封装 `TaskContext`，实现并注册 task 工具集供规划对话智能体和文档执行智能体调用 | `.agent/tasks.db` | — |
-| `execution/` | 执行循环：调用模型、处理工具调用、写文件、触发检查点 | 工作区文件、`.agent/tasks.db` | `lmkit-rs`、`agentool` |
-| `checkpoint/` | 检查点状态机、前端通知 | `.agent/tasks.db`（`checkpoints` 表） | — |
-| `preview/` | 调用 PreviewBackend 渲染 HTML | `.agent/snapshots.db`、`.agent/snapshots/` | `comrak`（v1）、`mdweave`（v2）、`agentool::fs` |
+| `project/` | 蓝图与任务 CRUD、状态机；实现并注册 project 工具集供两个智能体调用 | `.agent/project.db` | `sea-orm` |
+| `execution/` | 执行循环：调用模型、分发工具调用、触发检查点 | — | `lmkit-rs`、`agentool`、`project/` |
+| `checkpoint/` | 检查点状态机、前端通知 | — | `project/` |
+| `preview/` | 调用 PreviewBackend 渲染 HTML | 工作区文件（只读） | `comrak`（v1）、`mdweave`（v2）、`agentool::fs` |
 | `state/` | 管理 `ActiveContext`（当前工作区/文件/蓝图/任务上下文） | 内存态 | — |
 
 ### ActiveContext
@@ -525,12 +534,42 @@ type ActiveContext = {
 
 | 模块 | 界面区域 | 主要功能 |
 |------|----------|----------|
-| `blueprint/` | 蓝图视图 | 定义和查看文档集结构、要求、约束 |
-| `board/` | 工作看板 | 查看任务树状态、进度、风险 |
+| `project/` | 蓝图视图 | 规划视角：定义文档集结构、管理蓝图条目与约束、查看蓝图状态；不展示任务执行细节 |
+| `board/` | 任务看板 | 执行视角：以树状/列表形式展示任务运行状态、进度、风险；不涉及蓝图编辑 |
 | `editor/` | 主工作区 | 浏览文件、手工修订 |
 | `preview/` | 预览容器 | 展示渲染后的 HTML |
 | `chat/` | 统一对话框 | 用户与智能体团队的协作空间，支持 @ 路由 |
 | `timeline/` | 智能体时间轴 | 单个执行智能体的动作序列（工具调用、文件读写等） |
+
+### 目录结构
+
+```
+docwise/
+├── src/                          # 前端（Tauri WebView）
+│   └── modules/
+│       ├── project/              # 蓝图视图（规划视角）
+│       ├── board/                # 任务看板（执行视角）
+│       ├── editor/               # 主工作区
+│       ├── preview/              # 预览容器
+│       ├── chat/                 # 统一对话框
+│       └── timeline/             # 智能体时间轴
+└── src-tauri/
+    ├── src/
+    │   └── app/
+    │       ├── workspace/        # 工作区管理、FileBuffer
+    │       ├── project/          # 蓝图与任务（sea-orm 实体 + 工具集）
+    │       │   ├── entity/       # sea-orm 生成的实体（blueprints、tasks 等）
+    │       │   ├── migration/    # sea-orm-migration 迁移文件
+    │       │   ├── context.rs    # ProjectContext（初始化、崩溃恢复）
+    │       │   └── tools.rs      # project 工具集注册
+    │       ├── execution/        # 执行循环（agent loop）
+    │       ├── checkpoint/       # 检查点状态机与前端通知
+    │       ├── preview/          # PreviewBackend trait 与实现
+    │       └── state/            # ActiveContext 管理
+    └── crates/
+        ├── agent-tools/          # agentool 工具库（fs/find/web/git/md/memory/todo）
+        └── lmkit-rs/             # 多厂商 LLM 客户端
+```
 
 ---
 
@@ -586,6 +625,7 @@ let tool_calls = merge_tool_call_deltas(&accumulated_deltas);
 ```rust
 // 初始化各 Context（应用启动时）
 let fs_ctx   = Arc::new(FsContext::new(workspace_root.clone(), false));
+let find_ctx = Arc::new(FindContext::new(workspace_root.clone()));
 let web_ctx  = Arc::new(WebContext::default());
 let git_ctx  = Arc::new(GitContext::new(workspace_root.clone()));
 let md_ctx   = Arc::new(MdContext::new(workspace_root.clone(), false));
@@ -595,6 +635,7 @@ let todo_ctx = Arc::new(TodoContext::new(workspace_root.clone()));
 // 按角色组合工具集（示例：文档执行智能体）
 let tools: Vec<Arc<dyn Tool>> = [
     agentool::fs::all_tools(fs_ctx.clone()),
+    agentool::find::all_tools(find_ctx.clone()),
     agentool::web::all_tools(web_ctx.clone()),
     agentool::git::all_tools(git_ctx.clone()),
     agentool::md::all_tools(md_ctx.clone()),
@@ -618,14 +659,14 @@ Docwise v1 有两个智能体角色。每个角色只拿到完成自身职责所
 
 | 工具集 | 工具 |
 |--------|------|
-| blueprint（Docwise 内置） | 全部 |
-| task（Docwise 内置） | `task_create`、`task_list`、`task_get`、`task_get_tree`、`task_update` |
-| fs | `read_file`、`list_directory` |
+| project（Docwise 内置，蓝图） | `blueprint_create`、`blueprint_get`、`blueprint_list`、`blueprint_update`、`blueprint_set_status`、`blueprint_item_add`、`blueprint_item_update`、`blueprint_item_remove` |
+| project（Docwise 内置，任务） | `task_create`、`task_list`、`task_get`、`task_get_tree`、`task_update` |
+| fs | `file_read`、`directory_list` |
 | web | `web_search`、`web_fetch` |
 | md | `extract_toc`、`markdown_stats` |
 | memory | 全部 |
 
-不给：`write_file`（规划阶段不写正文）、`task_acquire_lock`、执行控制类工具。
+不给：`file_write`（规划阶段不写正文）、`task_acquire_lock`、执行控制类工具。
 
 ### 文档执行智能体
 
@@ -636,21 +677,24 @@ Docwise v1 有两个智能体角色。每个角色只拿到完成自身职责所
 | 工具集 | 工具 |
 |--------|------|
 | preview（Docwise 内置，v1 可选） | `preview_render` |
-| task（Docwise 内置） | `task_get`、`task_update`、`task_start_run`、`task_end_run`、`task_append_step`、`task_update_step`、`task_open_checkpoint`、`task_close_checkpoint`、`task_acquire_lock`、`task_release_lock`、`task_add_artifact` |
+| project（Docwise 内置，任务） | `task_get`、`task_update`、`task_start_run`、`task_end_run`、`task_append_step`、`task_update_step`、`task_open_checkpoint`、`task_close_checkpoint`、`task_acquire_lock`、`task_release_lock`、`task_add_artifact` |
 | fs | 全部 |
+| find | `grep_search`、`glob_search` |
 | web | `web_search`、`web_fetch` |
 | git | `git_status`、`git_diff`、`git_commit`、`git_log` |
 | md | `extract_toc`、`markdown_stats` |
 | memory | 全部 |
 | todo | `todo_add`、`todo_list`、`todo_update` |
 
-不给：`task_create`（任务由规划智能体创建）、`task_delete`、blueprint 工具。
+不给：`task_create`（任务由规划智能体创建）、`task_delete`、蓝图工具。
 
 ### Docwise 内置工具集
 
-这两套工具在 `src-tauri/src/app/` 内实现，不进 `agentool`：
+这两套工具在 `src-tauri/src/app/project/` 内实现，不进 `agentool`：
 
-**blueprint 工具集**（规划对话智能体专用）
+**project 工具集**
+
+蓝图工具（规划对话智能体专用）：
 
 | 工具 | 说明 |
 |------|------|
@@ -663,12 +707,12 @@ Docwise v1 有两个智能体角色。每个角色只拿到完成自身职责所
 | `blueprint_item_update` | 更新条目字段 |
 | `blueprint_item_remove` | 删除条目 |
 
-**task 工具集**
+任务工具（两个智能体按权限使用）：
 
 | 工具 | 说明 |
 |------|------|
-| `task_create` | 创建任务，支持 `parent_id` 参数，默认状态 `backlog` |
-| `task_list` | 列出任务，支持按状态/标签/`parent_id` 过滤 |
+| `task_create` | 创建任务，支持 `parent_id` 和 `blueprint_item_id` 参数，默认状态 `backlog` |
+| `task_list` | 列出任务，支持按状态/标签/`parent_id`/`blueprint_item_id` 过滤 |
 | `task_get` | 获取单个任务详情 |
 | `task_get_tree` | 获取以某任务为根的完整子树（含状态汇总） |
 | `task_update` | 更新任务字段（状态、优先级、目标等） |
@@ -693,39 +737,37 @@ Docwise v1 有两个智能体角色。每个角色只拿到完成自身职责所
 
 | 工具集 | 规划对话智能体 | 文档执行智能体 |
 |--------|---------------|---------------|
-| blueprint（内置） | 全部 | — |
-| task（内置，读） | `list`、`get`、`get_tree` | `get`、`get_tree` |
-| task（内置，写） | `create`、`update`、`delete` | `update`、run/step/checkpoint/lock/artifact |
-| preview（内置，v1 可选） | — | `render` |
-| fs（读） | `read`、`list_dir` | 全部 |
-| fs（写） | — | `write`、`edit`、`create_dir`、`delete`、`move`、`copy` |
-| fs（快照） | — | `get_snapshot`、`list_snapshots` |
+| project（内置，蓝图） | 全部 | — |
+| project（内置，任务读） | `task_list`、`task_get`、`task_get_tree` | `task_get`、`task_get_tree` |
+| project（内置，任务写） | `task_create`、`task_update`、`task_delete` | `task_update`、run/step/checkpoint/lock/artifact |
+| preview（内置，v1 可选） | — | `preview_render` |
+| fs（读） | `file_read`、`directory_list` | 全部 |
+| fs（写） | — | `file_write`、`file_edit`、`directory_create`、`file_delete`、`file_move`、`file_copy` |
+| fs（快照） | — | `snapshot_get`、`snapshot_list` |
+| find | — | `grep_search`、`glob_search` |
 | web | 全部 | 全部 |
-| git | — | 全部（worktree 待补充） |
+| git | — | 全部 |
 | md | 全部 | 全部 |
 | memory | 全部 | 全部 |
-| todo | — | `add`、`list`、`update` |
+| todo | — | `todo_add`、`todo_list`、`todo_update` |
 
 ---
 
-## 任务模型说明
+## 项目模型说明
 
-task 工具集在 Docwise `src-tauri/src/app/tasks/` 内实现，不依赖 `agentool`。相比通用任务模型，Docwise 的任务存储额外支持：
+project 工具集在 Docwise `src-tauri/src/app/project/` 内实现，不依赖 `agentool`。蓝图与任务共用同一个 `.agent/project.db`，外键约束在库内完整生效。
 
 | 字段 | 位置 | 说明 |
 |------|------|------|
+| `tasks.blueprint_item_id` | `tasks` 表 | 关联蓝图条目，根任务（`parent_id IS NULL`）直接对应一个条目；子任务通过树状结构隐式归属 |
 | `tasks.parent_id` | `tasks` 表 | 支持树状结构，`NULL` 表示根任务；级联删除子任务 |
 | `tasks.conversation_ref` | `tasks` 表 | 关联对话框消息 ID，从任务视图可跳转到对话上下文 |
 | `checkpoints.conversation_ref` | `checkpoints` 表 | 关联触发该检查点的对话消息，用户回复后自动关闭检查点 |
 
-若未来 `agentool` 补充树状结构和对话引用支持，可将 `tasks/` 模块迁移回 `agentool::task`，条件：
+若未来 `agentool` 补充树状结构和对话引用支持，可将 `project/` 中的任务部分迁移回 `agentool::task`，条件：
 - 树状结构在 Docwise 中稳定运行
 - `conversation_ref` 语义足够通用（不绑定 Docwise 特有概念）
 - `parent_id` 的级联删除和状态传播规则经过验证
-
-另有一项已知缺口：git 工具集不包含 worktree 操作，待 agentool 维护团队跟进。
-
----
 
 ## v1 边界与演进方向
 
@@ -740,7 +782,7 @@ task 工具集在 Docwise `src-tauri/src/app/tasks/` 内实现，不依赖 `agen
 **v1 完成后，以下条件稳定才考虑演进：**
 - `Blueprint` 真相来源稳定
 - `Checkpoint` 治理闭环稳定
-- `tasks/` 模块表结构与启动恢复语义稳定
+- `project/` 模块表结构与启动恢复语义稳定
 - `mdweave` 预览/导出闭环稳定
 
 ---
@@ -752,4 +794,6 @@ task 工具集在 Docwise `src-tauri/src/app/tasks/` 内实现，不依赖 `agen
 | 2026-04-09 | 初版定稿：Blueprint + Task + Checkpoint 模型；对齐 agentool 与 lmkit-rs 实际 API；按场景主线重组，补充概念解释与流程串联 |
 | 2026-04-09 | 补充：全部工具集说明、智能体角色与工具权限分配表、git worktree 缺口说明；Docwise 内置工具集（blueprint/preview）；任务模型规划（树状结构、conversation_ref、抽象回 agentool 的条件） |
 | 2026-04-09 | 重构：对话+规划智能体合并为规划对话智能体；检查点改为对话框驱动；加入统一对话框与消息路由设计；蓝图由对话驱动生成；蓝图支持用户直接编辑并触发系统通知 |
-| 2026-04-13 | 修正：blueprint 工具集明确由 `blueprint/` 模块实现并注册给智能体；快照能力下沉至 `agentool::fs`（写操作前自动触发），snapshot 工具集移除，读取接口（`get_snapshot`/`list_snapshots`）归入 fs 工具集；task 工具集从 `agentool` 移出，改为 Docwise 内置（`tasks/` 模块），补充树状结构（`parent_id`）、`conversation_ref`、`task_get_tree` 等能力 |
+| 2026-04-13 | 修正：blueprint 工具集明确由 `blueprint/` 模块实现并注册给智能体；快照能力下沉至 `agentool::fs`（写操作前自动触发），snapshot 工具集移除，读取接口（`snapshot_get`/`snapshot_list`）归入 fs 工具集；task 工具集从 `agentool` 移出，改为 Docwise 内置（`tasks/` 模块），补充树状结构（`parent_id`）、`conversation_ref`、`task_get_tree` 等能力；fs 工具命名统一为名词前置（`file_read`、`file_write` 等）；git 工具集补充 worktree 管理工具（`worktree_add/list/remove/lock/unlock`） |
+| 2026-04-13 | 重构：`blueprint/` 与 `tasks/` 模块合并为 `project/`；blueprint 工具集与 task 工具集合并为 project 工具集；`.agent/blueprints.db` 与 `.agent/tasks.db` 合并为 `.agent/project.db`；`tasks` 表新增 `blueprint_item_id` 外键，外键约束在同库内完整生效 |
+| 2026-04-13 | 补充：完整目录结构（`src-tauri/src/app/` 与 `src/modules/`）；修正文档执行智能体标题缺失；`find` 工具集补充实际工具名（`grep_search`/`glob_search`）并加入执行智能体工具表与权限汇总表；`snapshot_get`/`snapshot_list` 标注待实现；DDL 路径改为 `project/migration/`；agentool 使用示例补充 `find_ctx` |
