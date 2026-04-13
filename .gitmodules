@@ -1,0 +1,6 @@
+[submodule "src-tauri/crates/lmkit-rs"]
+	path = src-tauri/crates/lmkit-rs
+	url = https://github.com/Zoranner/lmkit-rs.git
+[submodule "src-tauri/crates/agent-tools"]
+	path = src-tauri/crates/agent-tools
+	url = https://github.com/Zoranner/agent-tools.git
