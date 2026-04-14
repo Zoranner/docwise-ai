@@ -1,9 +1,11 @@
+mod active_context_cmd;
 mod execution_cmd;
 mod planning_cmd;
 mod preview_cmd;
 mod project_cmds;
 mod workspace;
 
+pub use active_context_cmd::*;
 pub use execution_cmd::*;
 pub use planning_cmd::*;
 pub use preview_cmd::*;

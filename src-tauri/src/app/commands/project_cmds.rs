@@ -1,6 +1,7 @@
 use sea_orm::DbErr;
-use tauri::State;
+use tauri::{AppHandle, State};
 
+use crate::app::checkpoint::CheckpointChangedEvent;
 use crate::app::project::{
     self,
     dto::{
@@ -9,7 +10,7 @@ use crate::app::project::{
     },
     BlueprintItemAddParams, BlueprintItemUpdateParams, TaskUpdateParams,
 };
-use crate::app::state::SharedProject;
+use crate::app::state::{SharedActiveContext, SharedProject};
 
 async fn db(
     state: &State<'_, SharedProject>,
@@ -238,25 +239,59 @@ pub async fn task_update_step(
 
 #[tauri::command]
 pub async fn task_open_checkpoint(
+    app: AppHandle,
+    active: State<'_, SharedActiveContext>,
     state: State<'_, SharedProject>,
     task_id: String,
     conversation_ref: String,
 ) -> Result<CheckpointDto, String> {
     let ctx = db(&state).await?;
-    project::task_open_checkpoint(&ctx.db, task_id, conversation_ref)
+    let cp = project::task_open_checkpoint(&ctx.db, task_id, conversation_ref)
         .await
-        .map_err(de)
+        .map_err(de)?;
+    {
+        let mut a = active.0.lock().await;
+        a.task_id = Some(cp.task_id.clone());
+        a.checkpoint_id = Some(cp.id.clone());
+    }
+    CheckpointChangedEvent {
+        action: "opened",
+        checkpoint: cp.clone(),
+        task_status_after: Some("waiting_checkpoint".to_owned()),
+    }
+    .emit(&app);
+    Ok(cp)
 }
 
 #[tauri::command]
 pub async fn task_close_checkpoint(
+    app: AppHandle,
+    active: State<'_, SharedActiveContext>,
     state: State<'_, SharedProject>,
     checkpoint_id: String,
 ) -> Result<CheckpointDto, String> {
     let ctx = db(&state).await?;
-    project::task_close_checkpoint(&ctx.db, checkpoint_id)
+    let cp = project::task_close_checkpoint(&ctx.db, checkpoint_id)
         .await
-        .map_err(de)
+        .map_err(de)?;
+    let task_status_after = project::task_get(&ctx.db, cp.task_id.clone())
+        .await
+        .ok()
+        .map(|d| d.task.status);
+    {
+        let mut a = active.0.lock().await;
+        if a.checkpoint_id.as_deref() == Some(cp.id.as_str()) {
+            a.checkpoint_id = None;
+        }
+        a.task_id = Some(cp.task_id.clone());
+    }
+    CheckpointChangedEvent {
+        action: "closed",
+        checkpoint: cp.clone(),
+        task_status_after,
+    }
+    .emit(&app);
+    Ok(cp)
 }
 
 #[tauri::command]

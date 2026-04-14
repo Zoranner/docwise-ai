@@ -2,6 +2,18 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { AgentStreamChannel } from "~/types/planning-stream";
 
+const workspacePathInput = ref("");
+const workspaceOpenError = ref<string | null>(null);
+const workspaceResolvedPath = ref<string | null>(null);
+
+const {
+  context: activeContext,
+  errorMessage: activeContextError,
+  refresh: refreshActiveContext,
+} = useDocwiseActiveContext();
+
+const { lastCheckpointEvent } = useDocwiseCheckpointEvents(refreshActiveContext);
+
 type RenderPreviewResult = {
   snapshotId: string;
   html: string;
@@ -55,6 +67,21 @@ function optU64(s: string): number | undefined {
   return Math.floor(n);
 }
 
+async function openWorkspace() {
+  const p = workspacePathInput.value.trim();
+  if (!p) return;
+  workspaceOpenError.value = null;
+  try {
+    await invoke("workspace_open", { path: p });
+    workspaceResolvedPath.value = await invoke<string | null>(
+      "workspace_get_path",
+    );
+    await refreshActiveContext();
+  } catch (e) {
+    workspaceOpenError.value = e instanceof Error ? e.message : String(e);
+  }
+}
+
 async function runAgentStream() {
   const llmMaxRetries = optU64(agentLlmMaxRetries.value);
   const llmRetryBaseDelayMs = optU64(agentLlmRetryBaseMs.value);
@@ -76,6 +103,14 @@ async function runAgentStream() {
 }
 
 onMounted(async () => {
+  await refreshActiveContext();
+  try {
+    workspaceResolvedPath.value = await invoke<string | null>(
+      "workspace_get_path",
+    );
+  } catch {
+    workspaceResolvedPath.value = null;
+  }
   try {
     const md = "# Docwise\n\nNuxt 4 + Nuxt UI 已接入。\n";
     const result = await invoke<RenderPreviewResult>("preview_render", {
@@ -99,6 +134,53 @@ onMounted(async () => {
     />
 
     <div class="mt-6 grid gap-6 lg:grid-cols-2">
+      <UCard class="lg:col-span-2">
+        <template #header>
+          <span class="font-medium">工作区与 ActiveContext</span>
+        </template>
+        <p class="text-muted mb-3 text-sm">
+          打开本地目录后写入 <code>.agent/project.db</code>，并同步设计文档中的
+          <code>ActiveContext</code>（供侧栏 / 看板 / 对话共用，当前为内存态）。
+        </p>
+        <div class="flex flex-wrap items-end gap-2">
+          <UFormField label="工作区目录路径" class="min-w-48 flex-1">
+            <UInput
+              v-model="workspacePathInput"
+              placeholder="例如 C:\path\to\workspace"
+              class="w-full font-mono text-sm"
+            />
+          </UFormField>
+          <UButton @click="openWorkspace">打开</UButton>
+        </div>
+        <p v-if="workspaceOpenError" class="text-error mt-2 text-sm">
+          {{ workspaceOpenError }}
+        </p>
+        <p v-if="workspaceResolvedPath" class="text-muted mt-2 text-xs">
+          已打开：<span class="font-mono">{{ workspaceResolvedPath }}</span>
+        </p>
+        <p v-if="activeContextError" class="text-error mt-2 text-sm">
+          {{ activeContextError }}
+        </p>
+        <p class="text-muted mt-3 text-xs font-medium uppercase tracking-wide">
+          ActiveContext（JSON）
+        </p>
+        <pre
+          class="bg-muted/30 mt-1 max-h-40 overflow-auto rounded-lg p-3 text-xs whitespace-pre-wrap"
+          >{{ activeContext ? JSON.stringify(activeContext, null, 2) : "—" }}</pre
+        >
+        <p class="text-muted mt-3 text-xs font-medium uppercase tracking-wide">
+          最近检查点事件（<code>docwise:checkpoint-changed</code>）
+        </p>
+        <pre
+          class="bg-muted/30 mt-1 max-h-32 overflow-auto rounded-lg p-3 text-xs whitespace-pre-wrap"
+          >{{
+            lastCheckpointEvent
+              ? JSON.stringify(lastCheckpointEvent, null, 2)
+              : "—"
+          }}</pre
+        >
+      </UCard>
+
       <UCard class="lg:col-span-2">
         <template #header>
           <div class="flex flex-wrap items-center justify-between gap-3">

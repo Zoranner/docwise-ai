@@ -1,5 +1,6 @@
 mod app;
 
+pub use app::checkpoint::CHECKPOINT_CHANGED_EVENT;
 pub use app::execution::{
     merge_planner_tool_list, run_agent_turn_stream, run_execution_turn_stream, run_planning_turn,
     run_planning_turn_stream, tools_by_name, AgentStreamError, AgentStreamTurn, ChatMessageWire,
@@ -10,7 +11,7 @@ pub use app::execution::{
 pub use app::project::tools::{
     definitions_for_lmkit, executor_project_tools, planner_project_tools, preview_render_tool,
 };
-pub use app::state::SharedProject;
+pub use app::state::{ActiveContext, SharedActiveContext, SharedProject};
 
 use app::commands;
 
@@ -18,7 +19,10 @@ use app::commands;
 pub fn run() {
     tauri::Builder::default()
         .manage(SharedProject::default())
+        .manage(SharedActiveContext::default())
         .invoke_handler(tauri::generate_handler![
+            commands::active_context_get,
+            commands::active_context_replace,
             commands::execution_agent_turn_stream,
             commands::planning_agent_turn_stream,
             commands::workspace_get_path,
