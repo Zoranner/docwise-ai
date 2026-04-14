@@ -27,6 +27,8 @@ pub fn run() {
             commands::planning_agent_turn_stream,
             commands::workspace_get_path,
             commands::workspace_open,
+            commands::workspace_read_text_file,
+            commands::workspace_list_directory,
             commands::preview_render,
             commands::blueprint_create,
             commands::blueprint_get,
