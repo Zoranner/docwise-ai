@@ -1,8 +1,11 @@
 mod app;
 
 pub use app::execution::{
-    merge_planner_tool_list, run_planning_turn, tools_by_name, PlanningAgentError,
-    PlanningLoopConfig, PlanningTurnResult,
+    merge_planner_tool_list, run_agent_turn_stream, run_execution_turn_stream, run_planning_turn,
+    run_planning_turn_stream, tools_by_name, AgentStreamError, AgentStreamTurn, ChatMessageWire,
+    ExecutionStreamError, ExecutionStreamTurn, PlanningAgentError, PlanningLoopConfig,
+    PlanningStreamEnvelope, PlanningStreamError, PlanningStreamEvent, PlanningStreamTurn,
+    PlanningTurnResult, ToolCallWire, EXECUTION_AGENT_EVENT, PLANNING_AGENT_EVENT,
 };
 pub use app::project::tools::{
     definitions_for_lmkit, executor_project_tools, planner_project_tools, preview_render_tool,
@@ -16,6 +19,8 @@ pub fn run() {
     tauri::Builder::default()
         .manage(SharedProject::default())
         .invoke_handler(tauri::generate_handler![
+            commands::execution_agent_turn_stream,
+            commands::planning_agent_turn_stream,
             commands::workspace_get_path,
             commands::workspace_open,
             commands::preview_render,

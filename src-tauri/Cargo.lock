@@ -1152,6 +1152,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "comrak",
+ "futures",
  "lmkit",
  "migration",
  "sea-orm",

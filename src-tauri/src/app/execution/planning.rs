@@ -4,25 +4,49 @@
 
 use std::sync::Arc;
 
-use agentool::Tool;
-use lmkit::chat::{ChatMessage, ChatProvider, ChatRequest, RequestPreset, Role, ToolChoice};
-use serde_json::{json, Value};
-
+use super::planning_core::{dispatch_tool, parse_tool_arguments};
 use super::tool_registry::{merge_planner_tool_list, tools_by_name};
 use crate::app::project::tools::{definitions_for_lmkit, planner_project_tools};
 use crate::app::state::SharedProject;
+use agentool::Tool;
+use lmkit::chat::{ChatMessage, ChatProvider, ChatRequest, RequestPreset, Role, ToolChoice};
 
 /// 规划循环配置。
 #[derive(Debug, Clone)]
 pub struct PlanningLoopConfig {
     /// 单次用户回合内，最多执行多少轮「模型 → tool → 模型」。
     pub max_tool_rounds: u32,
+    /// 单次「模型请求」在可重试错误时的**额外**尝试次数（不含首次）。例如 `3` 表示最多共 4 次 HTTP/SSE。
+    pub llm_max_retries: u32,
+    pub llm_retry_base_delay_ms: u64,
+    pub llm_retry_max_delay_ms: u64,
 }
 
 impl Default for PlanningLoopConfig {
     fn default() -> Self {
         Self {
             max_tool_rounds: 24,
+            llm_max_retries: 3,
+            llm_retry_base_delay_ms: 500,
+            llm_retry_max_delay_ms: 30_000,
+        }
+    }
+}
+
+impl PlanningLoopConfig {
+    /// 流式 / 命令入口：未提供的字段用 [`PlanningLoopConfig::default`]。
+    pub fn for_agent_command(
+        max_tool_rounds: Option<u32>,
+        llm_max_retries: Option<u32>,
+        llm_retry_base_delay_ms: Option<u64>,
+        llm_retry_max_delay_ms: Option<u64>,
+    ) -> Self {
+        let d = Self::default();
+        Self {
+            max_tool_rounds: max_tool_rounds.unwrap_or(d.max_tool_rounds),
+            llm_max_retries: llm_max_retries.unwrap_or(d.llm_max_retries),
+            llm_retry_base_delay_ms: llm_retry_base_delay_ms.unwrap_or(d.llm_retry_base_delay_ms),
+            llm_retry_max_delay_ms: llm_retry_max_delay_ms.unwrap_or(d.llm_retry_max_delay_ms),
         }
     }
 }
@@ -47,7 +71,7 @@ pub enum PlanningAgentError {
 impl std::fmt::Display for PlanningAgentError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Lmkit(e) => write!(f, "{e}"),
+            Self::Lmkit(e) => write!(f, "{}", e.format_diagnostic()),
             Self::MaxToolRounds { limit, .. } => {
                 write!(f, "planning agent exceeded max tool rounds ({limit})")
             }
@@ -67,33 +91,6 @@ impl std::error::Error for PlanningAgentError {
 impl From<lmkit::Error> for PlanningAgentError {
     fn from(e: lmkit::Error) -> Self {
         Self::Lmkit(e)
-    }
-}
-
-fn parse_tool_arguments(raw: &str) -> Value {
-    let t = raw.trim();
-    if t.is_empty() {
-        return json!({});
-    }
-    serde_json::from_str(t).unwrap_or_else(|_| json!({ "_raw": raw }))
-}
-
-async fn dispatch_tool(
-    registry: &std::collections::HashMap<String, Arc<dyn Tool>>,
-    name: &str,
-    args: Value,
-) -> Value {
-    match registry.get(name) {
-        Some(tool) => match tool.execute(args).await {
-            Ok(v) => v,
-            Err(e) => json!({ "error": { "code": e.code, "message": e.message } }),
-        },
-        None => json!({
-            "error": {
-                "code": "unknown_tool",
-                "message": format!("no tool registered named {name:?}")
-            }
-        }),
     }
 }
 
@@ -122,7 +119,31 @@ pub async fn run_planning_turn(
             ..Default::default()
         };
 
-        let resp = provider.complete(&req).await?;
+        let max_attempts = config.llm_max_retries.saturating_add(1).max(1);
+        let mut resp_opt = None;
+        for attempt in 0..max_attempts {
+            if attempt > 0 {
+                let delay = super::llm_retry::backoff_delay_ms(
+                    attempt - 1,
+                    config.llm_retry_base_delay_ms,
+                    config.llm_retry_max_delay_ms,
+                );
+                super::llm_retry::sleep_delay_ms(delay).await;
+            }
+            match provider.complete(&req).await {
+                Ok(r) => {
+                    resp_opt = Some(r);
+                    break;
+                }
+                Err(e) => {
+                    if e.is_retryable() && attempt + 1 < max_attempts {
+                        continue;
+                    }
+                    return Err(PlanningAgentError::from(e));
+                }
+            }
+        }
+        let resp = resp_opt.expect("at least one attempt");
 
         let assistant_msg = ChatMessage {
             role: Role::Assistant,
