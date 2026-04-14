@@ -13,6 +13,7 @@ use serde_json::{json, Value};
 use super::ops;
 use super::params::{BlueprintItemAddParams, BlueprintItemUpdateParams, TaskUpdateParams};
 use super::ProjectContext;
+use crate::app::checkpoint::CheckpointBridge;
 use crate::app::preview::ComrakStubBackend;
 use crate::app::state::SharedProject;
 
@@ -473,36 +474,110 @@ project_tool!(
     exec_task_update_step
 );
 
-project_tool!(
-    TaskOpenCheckpointTool,
-    TaskOpenCheckpointParams,
-    { task_id: String, conversation_ref: String },
-    "task_open_checkpoint",
-    "Open a checkpoint and set task status waiting_checkpoint.",
-    {
-        "type": "object",
-        "properties": {
-            "task_id": { "type": "string" },
-            "conversation_ref": { "type": "string", "description": "Message id or ref for resume" }
-        },
-        "required": ["task_id", "conversation_ref"]
-    },
-    exec_task_open_checkpoint
-);
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) struct TaskOpenCheckpointParams {
+    pub(crate) task_id: String,
+    pub(crate) conversation_ref: String,
+}
 
-project_tool!(
-    TaskCloseCheckpointTool,
-    TaskCloseCheckpointParams,
-    { checkpoint_id: String },
-    "task_close_checkpoint",
-    "Close checkpoint; may restore task from waiting_checkpoint to running.",
-    {
-        "type": "object",
-        "properties": { "checkpoint_id": { "type": "string" } },
-        "required": ["checkpoint_id"]
-    },
-    exec_task_close_checkpoint
-);
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) struct TaskCloseCheckpointParams {
+    pub(crate) checkpoint_id: String,
+}
+
+pub(crate) struct TaskOpenCheckpointTool {
+    state: SharedProject,
+    bridge: Option<Arc<CheckpointBridge>>,
+}
+
+impl TaskOpenCheckpointTool {
+    pub(crate) fn new(state: SharedProject, bridge: Option<Arc<CheckpointBridge>>) -> Self {
+        Self { state, bridge }
+    }
+}
+
+#[async_trait::async_trait]
+impl Tool for TaskOpenCheckpointTool {
+    fn name(&self) -> &str {
+        "task_open_checkpoint"
+    }
+
+    fn description(&self) -> &str {
+        "Open a checkpoint and set task status waiting_checkpoint."
+    }
+
+    fn schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "task_id": { "type": "string" },
+                "conversation_ref": { "type": "string", "description": "Message id or ref for resume" }
+            },
+            "required": ["task_id", "conversation_ref"]
+        })
+    }
+
+    async fn execute(&self, params: Value) -> ToolResult {
+        let p: TaskOpenCheckpointParams = serde_json::from_value(params).map_err(invalid_params)?;
+        let ctx = require_ctx(&self.state).await?;
+        let r = ops::task_open_checkpoint(&ctx.db, p.task_id, p.conversation_ref)
+            .await
+            .map_err(db_tool_err)?;
+        if let Some(b) = self.bridge.as_ref() {
+            b.notify_opened(&r).await;
+        }
+        to_json(r)
+    }
+}
+
+pub(crate) struct TaskCloseCheckpointTool {
+    state: SharedProject,
+    bridge: Option<Arc<CheckpointBridge>>,
+}
+
+impl TaskCloseCheckpointTool {
+    pub(crate) fn new(state: SharedProject, bridge: Option<Arc<CheckpointBridge>>) -> Self {
+        Self { state, bridge }
+    }
+}
+
+#[async_trait::async_trait]
+impl Tool for TaskCloseCheckpointTool {
+    fn name(&self) -> &str {
+        "task_close_checkpoint"
+    }
+
+    fn description(&self) -> &str {
+        "Close checkpoint; may restore task from waiting_checkpoint to running."
+    }
+
+    fn schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": { "checkpoint_id": { "type": "string" } },
+            "required": ["checkpoint_id"]
+        })
+    }
+
+    async fn execute(&self, params: Value) -> ToolResult {
+        let p: TaskCloseCheckpointParams =
+            serde_json::from_value(params).map_err(invalid_params)?;
+        let ctx = require_ctx(&self.state).await?;
+        let r = ops::task_close_checkpoint(&ctx.db, p.checkpoint_id)
+            .await
+            .map_err(db_tool_err)?;
+        let task_status_after = ops::task_get(&ctx.db, r.task_id.clone())
+            .await
+            .ok()
+            .map(|d| d.task.status);
+        if let Some(b) = self.bridge.as_ref() {
+            b.notify_closed(&r, task_status_after).await;
+        }
+        to_json(r)
+    }
+}
 
 project_tool!(
     TaskAcquireLockTool,
@@ -741,26 +816,6 @@ async fn exec_task_update_step(db: &DatabaseConnection, p: TaskUpdateStepParams)
     to_json(r)
 }
 
-async fn exec_task_open_checkpoint(
-    db: &DatabaseConnection,
-    p: TaskOpenCheckpointParams,
-) -> ToolResult {
-    let r = ops::task_open_checkpoint(db, p.task_id, p.conversation_ref)
-        .await
-        .map_err(db_tool_err)?;
-    to_json(r)
-}
-
-async fn exec_task_close_checkpoint(
-    db: &DatabaseConnection,
-    p: TaskCloseCheckpointParams,
-) -> ToolResult {
-    let r = ops::task_close_checkpoint(db, p.checkpoint_id)
-        .await
-        .map_err(db_tool_err)?;
-    to_json(r)
-}
-
 async fn exec_task_acquire_lock(db: &DatabaseConnection, p: TaskAcquireLockParams) -> ToolResult {
     let r = ops::task_acquire_lock(db, p.task_id, p.path, p.expires_at)
         .await
@@ -842,7 +897,12 @@ pub fn planner_project_tools(state: SharedProject) -> Vec<Arc<dyn Tool>> {
 }
 
 /// 文档执行智能体：任务读/写、运行/步骤/检查点/锁/产出物（无蓝图工具）。
-pub fn executor_project_tools(state: SharedProject) -> Vec<Arc<dyn Tool>> {
+///
+/// `checkpoint_bridge`：流式执行回合中传入，使工具路径与 IPC 一致地更新 ActiveContext 并广播事件。
+pub fn executor_project_tools(
+    state: SharedProject,
+    checkpoint_bridge: Option<Arc<CheckpointBridge>>,
+) -> Vec<Arc<dyn Tool>> {
     vec![
         Arc::new(TaskGetTool::new(state.clone())),
         Arc::new(TaskGetTreeTool::new(state.clone())),
@@ -851,8 +911,14 @@ pub fn executor_project_tools(state: SharedProject) -> Vec<Arc<dyn Tool>> {
         Arc::new(TaskEndRunTool::new(state.clone())),
         Arc::new(TaskAppendStepTool::new(state.clone())),
         Arc::new(TaskUpdateStepTool::new(state.clone())),
-        Arc::new(TaskOpenCheckpointTool::new(state.clone())),
-        Arc::new(TaskCloseCheckpointTool::new(state.clone())),
+        Arc::new(TaskOpenCheckpointTool::new(
+            state.clone(),
+            checkpoint_bridge.clone(),
+        )),
+        Arc::new(TaskCloseCheckpointTool::new(
+            state.clone(),
+            checkpoint_bridge.clone(),
+        )),
         Arc::new(TaskAcquireLockTool::new(state.clone())),
         Arc::new(TaskReleaseLockTool::new(state.clone())),
         Arc::new(TaskAddArtifactTool::new(state)),

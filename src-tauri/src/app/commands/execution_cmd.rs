@@ -1,5 +1,6 @@
 use std::ops::Deref;
 use std::str::FromStr;
+use std::sync::Arc;
 use std::time::Duration;
 
 use lmkit::{create_chat_provider, Provider, ProviderConfig};
@@ -8,12 +9,13 @@ use tauri::async_runtime;
 use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
 
+use crate::app::checkpoint::CheckpointBridge;
 use crate::app::execution::{
     agentool_bundles, run_execution_turn_stream, wire_to_chat, ChatMessageWire,
     ExecutionStreamTurn, PlanningLoopConfig, PlanningStreamEnvelope, PlanningStreamEvent,
     EXECUTION_AGENT_EVENT,
 };
-use crate::app::state::SharedProject;
+use crate::app::state::{SharedActiveContext, SharedProject};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -49,6 +51,7 @@ fn default_include_preview() -> bool {
 pub fn execution_agent_turn_stream(
     app: AppHandle,
     state: State<'_, SharedProject>,
+    active: State<'_, SharedActiveContext>,
     req: ExecutionAgentStreamRequest,
 ) -> Result<(), String> {
     let run_id = req.run_id.unwrap_or_else(|| Uuid::new_v4().to_string());
@@ -70,6 +73,7 @@ pub fn execution_agent_turn_stream(
         .collect::<Result<_, String>>()?;
 
     let shared = state.deref().clone();
+    let checkpoint_bridge = Arc::new(CheckpointBridge::new(app.clone(), active.deref().clone()));
     let config = PlanningLoopConfig::for_agent_command(
         req.max_tool_rounds,
         req.llm_max_retries,
@@ -138,6 +142,7 @@ pub fn execution_agent_turn_stream(
             provider_label: &provider_label,
             model_label: &model_label,
             include_preview_tool,
+            checkpoint_bridge: Some(checkpoint_bridge),
         };
         let _ = run_execution_turn_stream(turn, emit).await;
     });

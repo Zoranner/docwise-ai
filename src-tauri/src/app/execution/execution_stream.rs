@@ -9,6 +9,7 @@ use super::agent_stream::{run_agent_turn_stream, AgentStreamError, AgentStreamTu
 use super::planning::PlanningLoopConfig;
 use super::planning_events::PlanningStreamEnvelope;
 use super::tool_registry::merge_planner_tool_list;
+use crate::app::checkpoint::CheckpointBridge;
 use crate::app::project::tools::{executor_project_tools, preview_render_tool};
 use crate::app::state::SharedProject;
 
@@ -24,6 +25,8 @@ pub struct ExecutionStreamTurn<'a> {
     pub provider_label: &'a str,
     pub model_label: &'a str,
     pub include_preview_tool: bool,
+    /// 非 None 时，`task_open_checkpoint` / `task_close_checkpoint` 工具与 IPC 行为一致（事件 + ActiveContext）。
+    pub checkpoint_bridge: Option<Arc<CheckpointBridge>>,
 }
 
 pub async fn run_execution_turn_stream<E>(
@@ -34,7 +37,7 @@ where
     E: FnMut(PlanningStreamEnvelope),
 {
     let mut tools = merge_planner_tool_list(
-        executor_project_tools(turn.shared.clone()),
+        executor_project_tools(turn.shared.clone(), turn.checkpoint_bridge.clone()),
         turn.additional_tools.as_slice(),
     );
     if turn.include_preview_tool {

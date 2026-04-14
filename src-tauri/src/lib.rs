@@ -1,6 +1,6 @@
 mod app;
 
-pub use app::checkpoint::CHECKPOINT_CHANGED_EVENT;
+pub use app::checkpoint::{CheckpointBridge, CHECKPOINT_CHANGED_EVENT};
 pub use app::execution::{
     merge_planner_tool_list, run_agent_turn_stream, run_execution_turn_stream, run_planning_turn,
     run_planning_turn_stream, tools_by_name, AgentStreamError, AgentStreamTurn, ChatMessageWire,

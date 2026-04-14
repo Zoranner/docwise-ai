@@ -1,7 +1,9 @@
+use std::ops::Deref;
+
 use sea_orm::DbErr;
 use tauri::{AppHandle, State};
 
-use crate::app::checkpoint::CheckpointChangedEvent;
+use crate::app::checkpoint::CheckpointBridge;
 use crate::app::project::{
     self,
     dto::{
@@ -249,17 +251,8 @@ pub async fn task_open_checkpoint(
     let cp = project::task_open_checkpoint(&ctx.db, task_id, conversation_ref)
         .await
         .map_err(de)?;
-    {
-        let mut a = active.0.lock().await;
-        a.task_id = Some(cp.task_id.clone());
-        a.checkpoint_id = Some(cp.id.clone());
-    }
-    CheckpointChangedEvent {
-        action: "opened",
-        checkpoint: cp.clone(),
-        task_status_after: Some("waiting_checkpoint".to_owned()),
-    }
-    .emit(&app);
+    let bridge = CheckpointBridge::new(app.clone(), active.deref().clone());
+    bridge.notify_opened(&cp).await;
     Ok(cp)
 }
 
@@ -278,19 +271,8 @@ pub async fn task_close_checkpoint(
         .await
         .ok()
         .map(|d| d.task.status);
-    {
-        let mut a = active.0.lock().await;
-        if a.checkpoint_id.as_deref() == Some(cp.id.as_str()) {
-            a.checkpoint_id = None;
-        }
-        a.task_id = Some(cp.task_id.clone());
-    }
-    CheckpointChangedEvent {
-        action: "closed",
-        checkpoint: cp.clone(),
-        task_status_after,
-    }
-    .emit(&app);
+    let bridge = CheckpointBridge::new(app.clone(), active.deref().clone());
+    bridge.notify_closed(&cp, task_status_after).await;
     Ok(cp)
 }
 
