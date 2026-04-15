@@ -10,6 +10,7 @@ const {
   context: activeContext,
   errorMessage: activeContextError,
   refresh: refreshActiveContext,
+  patch: patchActiveContext,
 } = useDocwiseActiveContext();
 
 const { lastCheckpointEvent } = useDocwiseCheckpointEvents(refreshActiveContext);
@@ -25,6 +26,79 @@ type RenderPreviewResult = {
 const previewHtml = ref("");
 const errorMessage = ref<string | null>(null);
 const loading = ref(true);
+
+/** 相对工作区根，统一用 / */
+const editorRelPath = ref("");
+const editorContent = ref("");
+const editorError = ref<string | null>(null);
+const editorLoading = ref(false);
+
+function normalizeWorkspaceRelPath(s: string): string {
+  return s.trim().replace(/\\/g, "/");
+}
+
+async function loadEditorFile() {
+  const rel = normalizeWorkspaceRelPath(editorRelPath.value);
+  if (!rel) {
+    editorError.value = "请填写相对路径";
+    return;
+  }
+  editorError.value = null;
+  editorLoading.value = true;
+  try {
+    editorContent.value = await invoke<string>("workspace_read_text_file", {
+      path: rel,
+    });
+    editorRelPath.value = rel;
+    await patchActiveContext({ filePath: rel });
+  } catch (e) {
+    editorError.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    editorLoading.value = false;
+  }
+}
+
+async function saveEditorFile() {
+  const rel = normalizeWorkspaceRelPath(editorRelPath.value);
+  if (!rel) {
+    editorError.value = "请填写相对路径";
+    return;
+  }
+  editorError.value = null;
+  editorLoading.value = true;
+  try {
+    await invoke("workspace_write_text_file", {
+      path: rel,
+      content: editorContent.value,
+    });
+    editorRelPath.value = rel;
+    await patchActiveContext({ filePath: rel });
+  } catch (e) {
+    editorError.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    editorLoading.value = false;
+  }
+}
+
+async function previewFromEditor() {
+  const md = editorContent.value;
+  if (!md.trim()) {
+    editorError.value = "编辑器为空";
+    return;
+  }
+  editorError.value = null;
+  try {
+    const snap = normalizeWorkspaceRelPath(editorRelPath.value);
+    const result = await invoke<RenderPreviewResult>("preview_render", {
+      content: md,
+      snapshotId: snap || null,
+    });
+    previewHtml.value = result.html;
+    errorMessage.value = null;
+  } catch (e) {
+    errorMessage.value = e instanceof Error ? e.message : String(e);
+  }
+}
 
 const providerOptions = [
   { value: "ollama", label: "Ollama" },
@@ -104,6 +178,9 @@ async function runAgentStream() {
 
 onMounted(async () => {
   await refreshActiveContext();
+  if (activeContext.value?.filePath) {
+    editorRelPath.value = activeContext.value.filePath;
+  }
   try {
     workspaceResolvedPath.value = await invoke<string | null>(
       "workspace_get_path",
@@ -179,6 +256,56 @@ onMounted(async () => {
               : "—"
           }}</pre
         >
+      </UCard>
+
+      <UCard class="lg:col-span-2">
+        <template #header>
+          <span class="font-medium">简易编辑器（FileBuffer 雏形）</span>
+        </template>
+        <p class="text-muted mb-3 text-sm">
+          相对工作区根路径读写 UTF-8；打开/保存时会 <code>active_context_patch</code> 更新
+          <code>filePath</code>，与设计文档
+          <code>ActiveContext</code> 对齐。
+        </p>
+        <div class="flex flex-wrap items-end gap-2">
+          <UFormField label="相对路径" class="min-w-64 flex-1">
+            <UInput
+              v-model="editorRelPath"
+              placeholder="例如 docs/readme.md"
+              class="w-full font-mono text-sm"
+              :disabled="editorLoading"
+            />
+          </UFormField>
+          <UButton
+            :disabled="editorLoading || !workspaceResolvedPath"
+            @click="loadEditorFile"
+          >
+            打开
+          </UButton>
+          <UButton
+            :disabled="editorLoading || !workspaceResolvedPath"
+            color="primary"
+            @click="saveEditorFile"
+          >
+            保存
+          </UButton>
+          <UButton
+            variant="outline"
+            :disabled="!editorContent.trim()"
+            @click="previewFromEditor"
+          >
+            预览编辑器内容
+          </UButton>
+        </div>
+        <p v-if="editorError" class="text-error mt-2 text-sm">
+          {{ editorError }}
+        </p>
+        <UTextarea
+          v-model="editorContent"
+          :rows="14"
+          class="font-mono mt-3 w-full text-sm"
+          placeholder="打开文件后在此编辑…"
+        />
       </UCard>
 
       <UCard class="lg:col-span-2">

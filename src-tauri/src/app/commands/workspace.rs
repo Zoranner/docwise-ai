@@ -72,6 +72,34 @@ pub async fn workspace_read_text_file(
         .map_err(|e| format!("read file: {e}"))
 }
 
+/// 写入工作区内 UTF-8 文本（`path` 相对工作区根；父目录不存在则创建）。已存在目录则报错。
+#[tauri::command]
+pub async fn workspace_write_text_file(
+    state: State<'_, SharedProject>,
+    path: String,
+    content: String,
+) -> Result<(), String> {
+    let ctx = state
+        .0
+        .lock()
+        .await
+        .clone()
+        .ok_or_else(|| "workspace not opened".to_owned())?;
+    let root = ctx.workspace_root();
+    let resolved = resolve_workspace_path(root, &path)?;
+    if resolved.exists() && resolved.is_dir() {
+        return Err("path is a directory".into());
+    }
+    if let Some(parent) = resolved.parent() {
+        fs::create_dir_all(parent)
+            .await
+            .map_err(|e| format!("create_dir_all: {e}"))?;
+    }
+    fs::write(&resolved, content.as_bytes())
+        .await
+        .map_err(|e| format!("write file: {e}"))
+}
+
 /// 列出工作区内目录条目（`path` 为空表示根目录）。
 #[tauri::command]
 pub async fn workspace_list_directory(
