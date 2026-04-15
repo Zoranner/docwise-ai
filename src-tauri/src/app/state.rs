@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -6,13 +7,27 @@ use tokio::sync::Mutex;
 
 use crate::app::project::ProjectContext;
 
-/// 当前打开的 `ProjectContext`（工作区 `.agent/project.db`）。
+/// 已打开的工作区集合与当前前台（多项目并行会话）。
+#[derive(Clone, Default)]
+pub struct WorkspaceHost {
+    pub open: HashMap<String, Arc<ProjectContext>>,
+    pub focused_workspace_id: Option<String>,
+}
+
+impl WorkspaceHost {
+    pub fn focused_context(&self) -> Option<Arc<ProjectContext>> {
+        let id = self.focused_workspace_id.as_ref()?;
+        self.open.get(id).cloned()
+    }
+}
+
+/// 全局工作区宿主（[`tauri::State`]）。
 #[derive(Clone)]
-pub struct SharedProject(pub Arc<Mutex<Option<Arc<ProjectContext>>>>);
+pub struct SharedProject(pub Arc<Mutex<WorkspaceHost>>);
 
 impl SharedProject {
     pub fn new() -> Self {
-        Self(Arc::new(Mutex::new(None)))
+        Self(Arc::new(Mutex::new(WorkspaceHost::default())))
     }
 }
 

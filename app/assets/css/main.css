@@ -1,2 +1,31 @@
 @import "tailwindcss";
 @import "@nuxt/ui";
+
+@layer base {
+  html {
+    font-family:
+      "Source Sans 3",
+      ui-sans-serif,
+      system-ui,
+      sans-serif;
+  }
+}
+
+/* 页面内容区统一最大宽度与内边距 */
+.docwise-page {
+  @apply mx-auto w-full max-w-[1400px] px-4 py-8 sm:px-6 sm:py-10;
+}
+
+/* 代码块 / 日志面板 */
+.docwise-code-panel {
+  @apply border-default bg-(--ui-bg-elevated) max-h-[min(24rem,50vh)] overflow-auto rounded-xl border p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap;
+}
+
+/* 分区标题 */
+.docwise-section-title {
+  @apply text-default text-base font-semibold tracking-tight;
+}
+
+.docwise-section-desc {
+  @apply text-muted mt-1 max-w-2xl text-sm leading-relaxed;
+}

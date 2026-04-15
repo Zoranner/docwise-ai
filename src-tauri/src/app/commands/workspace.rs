@@ -6,7 +6,9 @@ use tauri::State;
 use tokio::fs;
 
 use crate::app::project::ProjectContext;
-use crate::app::state::{ActiveContext, SharedActiveContext, SharedProject};
+use crate::app::state::{
+    workspace_id_from_root, ActiveContext, SharedActiveContext, SharedProject,
+};
 use crate::app::workspace::resolve_workspace_path;
 
 #[tauri::command]
@@ -15,8 +17,80 @@ pub async fn workspace_get_path(state: State<'_, SharedProject>) -> Result<Optio
         .0
         .lock()
         .await
-        .as_ref()
+        .focused_context()
         .map(|c| c.workspace_root().to_string_lossy().into_owned()))
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceSessionDto {
+    pub workspace_id: String,
+    pub path: String,
+    pub focused: bool,
+}
+
+/// 列出当前进程内已打开的工作区（含是否前台）。
+#[tauri::command]
+pub async fn workspace_list_open(
+    state: State<'_, SharedProject>,
+) -> Result<Vec<WorkspaceSessionDto>, String> {
+    let host = state.0.lock().await;
+    let focused = host.focused_workspace_id.as_deref();
+    let mut out: Vec<WorkspaceSessionDto> = host
+        .open
+        .iter()
+        .map(|(wid, ctx)| WorkspaceSessionDto {
+            workspace_id: wid.clone(),
+            path: ctx.workspace_root().to_string_lossy().into_owned(),
+            focused: focused == Some(wid.as_str()),
+        })
+        .collect();
+    out.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(out)
+}
+
+/// 将前台切换到已打开的工作区（`workspaceId` 为规范化根路径字符串，与 `ActiveContext.workspaceId` 一致）。
+#[tauri::command]
+pub async fn workspace_focus(
+    state: State<'_, SharedProject>,
+    active: State<'_, SharedActiveContext>,
+    workspace_id: String,
+) -> Result<(), String> {
+    let root = {
+        let mut host = state.0.lock().await;
+        let Some(ctx) = host.open.get(&workspace_id) else {
+            return Err("workspace is not open in this session".to_owned());
+        };
+        let root = ctx.workspace_root().to_path_buf();
+        host.focused_workspace_id = Some(workspace_id);
+        root
+    };
+    *active.0.lock().await = ActiveContext::reset_for_workspace_root(&root);
+    Ok(())
+}
+
+/// 从会话中移除一个已打开的工作区（不删磁盘）。若移除的是前台，则自动聚焦剩余集合中的任意一个或清空。
+#[tauri::command]
+pub async fn workspace_close(
+    state: State<'_, SharedProject>,
+    active: State<'_, SharedActiveContext>,
+    workspace_id: String,
+) -> Result<(), String> {
+    let next_root = {
+        let mut host = state.0.lock().await;
+        host.open.remove(&workspace_id);
+        if host.focused_workspace_id.as_deref() == Some(workspace_id.as_str()) {
+            host.focused_workspace_id = host.open.keys().next().cloned();
+        }
+        host.focused_context()
+            .map(|c| c.workspace_root().to_path_buf())
+    };
+    if let Some(r) = next_root {
+        *active.0.lock().await = ActiveContext::reset_for_workspace_root(&r);
+    } else {
+        *active.0.lock().await = ActiveContext::default();
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -32,12 +106,21 @@ pub async fn workspace_open(
     let root = root
         .canonicalize()
         .map_err(|e| format!("canonicalize workspace: {e}"))?;
-    let ctx = ProjectContext::open(root.clone())
-        .await
-        .map_err(|e| format!("open project db: {e}"))?;
-    let mut guard = state.0.lock().await;
-    *guard = Some(Arc::new(ctx));
-    drop(guard);
+    let wid = workspace_id_from_root(&root);
+
+    {
+        let mut host = state.0.lock().await;
+        if host.open.contains_key(&wid) {
+            host.focused_workspace_id = Some(wid);
+        } else {
+            let ctx = ProjectContext::open(root.clone())
+                .await
+                .map_err(|e| format!("open project db: {e}"))?;
+            host.open.insert(wid.clone(), Arc::new(ctx));
+            host.focused_workspace_id = Some(wid);
+        }
+    }
+
     *active.0.lock().await = ActiveContext::reset_for_workspace_root(&root);
     Ok(())
 }
@@ -60,7 +143,7 @@ pub async fn workspace_read_text_file(
         .0
         .lock()
         .await
-        .clone()
+        .focused_context()
         .ok_or_else(|| "workspace not opened".to_owned())?;
     let root = ctx.workspace_root();
     let resolved = resolve_workspace_path(root, &path)?;
@@ -83,7 +166,7 @@ pub async fn workspace_write_text_file(
         .0
         .lock()
         .await
-        .clone()
+        .focused_context()
         .ok_or_else(|| "workspace not opened".to_owned())?;
     let root = ctx.workspace_root();
     let resolved = resolve_workspace_path(root, &path)?;
@@ -110,7 +193,7 @@ pub async fn workspace_list_directory(
         .0
         .lock()
         .await
-        .clone()
+        .focused_context()
         .ok_or_else(|| "workspace not opened".to_owned())?;
     let root = ctx.workspace_root();
     let resolved = resolve_workspace_path(root, &path)?;

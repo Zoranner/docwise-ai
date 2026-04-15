@@ -110,7 +110,7 @@ pub fn execution_agent_turn_stream(
         let provider_label = cfg.provider.to_string();
         let model_label = cfg.model.clone();
 
-        let additional_tools = match shared.0.lock().await.as_ref() {
+        let additional_tools = match shared.0.lock().await.focused_context() {
             None => Vec::new(),
             Some(ctx) => {
                 match agentool_bundles::workspace_tools_executor(ctx.workspace_root().to_path_buf())

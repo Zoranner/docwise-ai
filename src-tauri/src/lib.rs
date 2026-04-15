@@ -11,7 +11,7 @@ pub use app::execution::{
 pub use app::project::tools::{
     definitions_for_lmkit, executor_project_tools, planner_project_tools, preview_render_tool,
 };
-pub use app::state::{ActiveContext, SharedActiveContext, SharedProject};
+pub use app::state::{ActiveContext, SharedActiveContext, SharedProject, WorkspaceHost};
 
 use app::commands;
 
@@ -26,6 +26,9 @@ pub fn run() {
             commands::execution_agent_turn_stream,
             commands::planning_agent_turn_stream,
             commands::workspace_get_path,
+            commands::workspace_list_open,
+            commands::workspace_focus,
+            commands::workspace_close,
             commands::workspace_open,
             commands::workspace_read_text_file,
             commands::workspace_write_text_file,

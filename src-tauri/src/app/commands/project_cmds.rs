@@ -21,7 +21,7 @@ async fn db(
         .0
         .lock()
         .await
-        .clone()
+        .focused_context()
         .ok_or_else(|| "workspace not opened".to_owned())
 }
 

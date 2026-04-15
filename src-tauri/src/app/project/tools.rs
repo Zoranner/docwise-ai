@@ -66,10 +66,15 @@ macro_rules! project_tool {
 }
 
 async fn require_ctx(state: &SharedProject) -> Result<Arc<ProjectContext>, ToolError> {
-    state.0.lock().await.clone().ok_or_else(|| ToolError {
-        code: "workspace_not_open".into(),
-        message: "Open a workspace before using project tools.".into(),
-    })
+    state
+        .0
+        .lock()
+        .await
+        .focused_context()
+        .ok_or_else(|| ToolError {
+            code: "workspace_not_open".into(),
+            message: "Open a workspace before using project tools.".into(),
+        })
 }
 
 fn invalid_params(e: serde_json::Error) -> ToolError {
