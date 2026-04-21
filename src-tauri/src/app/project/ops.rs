@@ -7,11 +7,11 @@ use sea_orm::{
 use uuid::Uuid;
 
 use super::dto::{
-    ArtifactDto, BlueprintDetailDto, BlueprintDto, BlueprintItemDto, CheckpointDto, PathLockDto,
+    BlueprintDetailDto, BlueprintDto, BlueprintItemDto, OutputDto, PathLockDto, ReviewDto,
     TaskDetailDto, TaskDto, TaskRunDto, TaskStepDto, TaskSubtreeSummaryDto, TaskTreeNodeDto,
 };
 use super::entity::{
-    artifact, blueprint, blueprint_item, checkpoint, path_lock, task, task_run, task_step,
+    blueprint, blueprint_item, output, path_lock, review, task, task_run, task_step,
 };
 use super::params::{BlueprintItemAddParams, BlueprintItemUpdateParams, TaskUpdateParams};
 use super::util::now_iso;
@@ -334,27 +334,27 @@ pub async fn task_get(db: &DatabaseConnection, id: String) -> Result<TaskDetailD
         .order_by_desc(task_run::Column::StartedAt)
         .all(db)
         .await?;
-    let checkpoints = checkpoint::Entity::find()
-        .filter(checkpoint::Column::TaskId.eq(id.clone()))
-        .order_by_desc(checkpoint::Column::CreatedAt)
+    let reviews = review::Entity::find()
+        .filter(review::Column::TaskId.eq(id.clone()))
+        .order_by_desc(review::Column::CreatedAt)
         .all(db)
         .await?;
     let locks = path_lock::Entity::find()
         .filter(path_lock::Column::TaskId.eq(id.clone()))
         .all(db)
         .await?;
-    let artifacts = artifact::Entity::find()
-        .filter(artifact::Column::TaskId.eq(id.clone()))
-        .order_by_desc(artifact::Column::CreatedAt)
+    let outputs = output::Entity::find()
+        .filter(output::Column::TaskId.eq(id.clone()))
+        .order_by_desc(output::Column::CreatedAt)
         .all(db)
         .await?;
     Ok(TaskDetailDto {
         task: t.into(),
         steps: steps.into_iter().map(Into::into).collect(),
         runs: runs.into_iter().map(Into::into).collect(),
-        checkpoints: checkpoints.into_iter().map(Into::into).collect(),
+        reviews: reviews.into_iter().map(Into::into).collect(),
         path_locks: locks.into_iter().map(Into::into).collect(),
-        artifacts: artifacts.into_iter().map(Into::into).collect(),
+        outputs: outputs.into_iter().map(Into::into).collect(),
     })
 }
 
@@ -611,18 +611,18 @@ pub async fn task_update_step(
         .ok_or_else(|| DbErr::RecordNotFound("task_step not found".to_owned()))
 }
 
-pub async fn task_open_checkpoint(
+pub async fn task_open_review(
     db: &DatabaseConnection,
     task_id: String,
     conversation_ref: String,
-) -> Result<CheckpointDto, DbErr> {
+) -> Result<ReviewDto, DbErr> {
     let _ = task::Entity::find_by_id(task_id.clone())
         .one(db)
         .await?
         .ok_or_else(|| DbErr::RecordNotFound("task not found".to_owned()))?;
     let ts = now_iso();
     let id = new_id();
-    let row = checkpoint::ActiveModel {
+    let row = review::ActiveModel {
         id: Set(id.clone()),
         task_id: Set(task_id.clone()),
         status: Set("open".to_owned()),
@@ -630,7 +630,7 @@ pub async fn task_open_checkpoint(
         created_at: Set(ts.clone()),
         updated_at: Set(ts.clone()),
     };
-    checkpoint::Entity::insert(row).exec(db).await?;
+    review::Entity::insert(row).exec(db).await?;
     let mut t: task::ActiveModel = task::Entity::find_by_id(task_id)
         .one(db)
         .await?
@@ -639,23 +639,23 @@ pub async fn task_open_checkpoint(
     t.status = Set("waiting_checkpoint".to_owned());
     t.updated_at = Set(now_iso());
     t.update(db).await?;
-    checkpoint::Entity::find_by_id(id)
+    review::Entity::find_by_id(id)
         .one(db)
         .await?
         .map(Into::into)
-        .ok_or_else(|| DbErr::RecordNotFound("checkpoint insert failed".to_owned()))
+        .ok_or_else(|| DbErr::RecordNotFound("review insert failed".to_owned()))
 }
 
-pub async fn task_close_checkpoint(
+pub async fn task_close_review(
     db: &DatabaseConnection,
-    checkpoint_id: String,
-) -> Result<CheckpointDto, DbErr> {
-    let m = checkpoint::Entity::find_by_id(checkpoint_id.clone())
+    review_id: String,
+) -> Result<ReviewDto, DbErr> {
+    let m = review::Entity::find_by_id(review_id.clone())
         .one(db)
         .await?
-        .ok_or_else(|| DbErr::RecordNotFound("checkpoint not found".to_owned()))?;
+        .ok_or_else(|| DbErr::RecordNotFound("review not found".to_owned()))?;
     let task_id = m.task_id.clone();
-    let mut a: checkpoint::ActiveModel = m.into();
+    let mut a: review::ActiveModel = m.into();
     a.status = Set("closed".to_owned());
     a.updated_at = Set(now_iso());
     a.update(db).await?;
@@ -669,11 +669,11 @@ pub async fn task_close_checkpoint(
         t.updated_at = Set(now_iso());
         t.update(db).await?;
     }
-    checkpoint::Entity::find_by_id(checkpoint_id)
+    review::Entity::find_by_id(review_id)
         .one(db)
         .await?
         .map(Into::into)
-        .ok_or_else(|| DbErr::RecordNotFound("checkpoint not found".to_owned()))
+        .ok_or_else(|| DbErr::RecordNotFound("review not found".to_owned()))
 }
 
 pub async fn task_acquire_lock(
@@ -715,14 +715,14 @@ pub async fn task_release_lock(db: &DatabaseConnection, lock_id: String) -> Resu
     Ok(())
 }
 
-pub async fn task_add_artifact(
+pub async fn task_add_output(
     db: &DatabaseConnection,
     task_id: String,
     kind: String,
     path: String,
     content: Option<String>,
     run_id: Option<String>,
-) -> Result<ArtifactDto, DbErr> {
+) -> Result<OutputDto, DbErr> {
     let _ = task::Entity::find_by_id(task_id.clone())
         .one(db)
         .await?
@@ -735,7 +735,7 @@ pub async fn task_add_artifact(
     }
     let id = new_id();
     let ts = now_iso();
-    let row = artifact::ActiveModel {
+    let row = output::ActiveModel {
         id: Set(id.clone()),
         task_id: Set(task_id),
         run_id: Set(run_id),
@@ -744,10 +744,10 @@ pub async fn task_add_artifact(
         content: Set(content.unwrap_or_default()),
         created_at: Set(ts),
     };
-    artifact::Entity::insert(row).exec(db).await?;
-    artifact::Entity::find_by_id(id)
+    output::Entity::insert(row).exec(db).await?;
+    output::Entity::find_by_id(id)
         .one(db)
         .await?
         .map(Into::into)
-        .ok_or_else(|| DbErr::RecordNotFound("artifact insert failed".to_owned()))
+        .ok_or_else(|| DbErr::RecordNotFound("output insert failed".to_owned()))
 }

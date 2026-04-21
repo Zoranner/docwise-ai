@@ -7,8 +7,8 @@ use crate::app::checkpoint::CheckpointBridge;
 use crate::app::project::{
     self,
     dto::{
-        ArtifactDto, BlueprintDetailDto, BlueprintDto, BlueprintItemDto, CheckpointDto,
-        PathLockDto, TaskDetailDto, TaskDto, TaskRunDto, TaskStepDto, TaskTreeNodeDto,
+        BlueprintDetailDto, BlueprintDto, BlueprintItemDto, OutputDto, PathLockDto, ReviewDto,
+        TaskDetailDto, TaskDto, TaskRunDto, TaskStepDto, TaskTreeNodeDto,
     },
     BlueprintItemAddParams, BlueprintItemUpdateParams, TaskUpdateParams,
 };
@@ -246,9 +246,9 @@ pub async fn task_open_checkpoint(
     state: State<'_, SharedProject>,
     task_id: String,
     conversation_ref: String,
-) -> Result<CheckpointDto, String> {
+) -> Result<ReviewDto, String> {
     let ctx = db(&state).await?;
-    let cp = project::task_open_checkpoint(&ctx.db, task_id, conversation_ref)
+    let cp = project::task_open_review(&ctx.db, task_id, conversation_ref)
         .await
         .map_err(de)?;
     let bridge = CheckpointBridge::new(app.clone(), active.deref().clone());
@@ -262,9 +262,9 @@ pub async fn task_close_checkpoint(
     active: State<'_, SharedActiveContext>,
     state: State<'_, SharedProject>,
     checkpoint_id: String,
-) -> Result<CheckpointDto, String> {
+) -> Result<ReviewDto, String> {
     let ctx = db(&state).await?;
-    let cp = project::task_close_checkpoint(&ctx.db, checkpoint_id)
+    let cp = project::task_close_review(&ctx.db, checkpoint_id)
         .await
         .map_err(de)?;
     let task_status_after = project::task_get(&ctx.db, cp.task_id.clone())
@@ -308,9 +308,9 @@ pub async fn task_add_artifact(
     path: String,
     content: Option<String>,
     run_id: Option<String>,
-) -> Result<ArtifactDto, String> {
+) -> Result<OutputDto, String> {
     let ctx = db(&state).await?;
-    project::task_add_artifact(&ctx.db, task_id, kind, path, content, run_id)
+    project::task_add_output(&ctx.db, task_id, kind, path, content, run_id)
         .await
         .map_err(de)
 }

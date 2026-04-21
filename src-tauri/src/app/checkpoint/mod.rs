@@ -6,7 +6,7 @@
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
-use crate::app::project::dto::CheckpointDto;
+use crate::app::project::dto::ReviewDto;
 use crate::app::state::SharedActiveContext;
 
 pub const CHECKPOINT_CHANGED_EVENT: &str = "docwise:checkpoint-changed";
@@ -15,7 +15,7 @@ pub const CHECKPOINT_CHANGED_EVENT: &str = "docwise:checkpoint-changed";
 #[serde(rename_all = "camelCase")]
 pub struct CheckpointChangedEvent {
     pub action: &'static str,
-    pub checkpoint: CheckpointDto,
+    pub checkpoint: ReviewDto,
     /// 数据库中该任务在此操作后的 `status`（关闭时可能为 `running` 等）。
     pub task_status_after: Option<String>,
 }
@@ -38,7 +38,7 @@ impl CheckpointBridge {
         Self { app, active }
     }
 
-    pub async fn notify_opened(&self, cp: &CheckpointDto) {
+    pub async fn notify_opened(&self, cp: &ReviewDto) {
         {
             let mut a = self.active.0.lock().await;
             a.task_id = Some(cp.task_id.clone());
@@ -52,7 +52,7 @@ impl CheckpointBridge {
         .emit(&self.app);
     }
 
-    pub async fn notify_closed(&self, cp: &CheckpointDto, task_status_after: Option<String>) {
+    pub async fn notify_closed(&self, cp: &ReviewDto, task_status_after: Option<String>) {
         {
             let mut a = self.active.0.lock().await;
             if a.checkpoint_id.as_deref() == Some(cp.id.as_str()) {

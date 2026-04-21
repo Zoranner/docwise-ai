@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use serde::Serialize;
 
 use super::entity::{
-    artifact, blueprint, blueprint_item, checkpoint, path_lock, task, task_run, task_step,
+    blueprint, blueprint_item, output, path_lock, review, task, task_run, task_step,
 };
 
 #[derive(Debug, Clone, Serialize)]
@@ -167,7 +167,7 @@ impl From<task_run::Model> for TaskRunDto {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CheckpointDto {
+pub struct ReviewDto {
     pub id: String,
     pub task_id: String,
     pub status: String,
@@ -176,8 +176,8 @@ pub struct CheckpointDto {
     pub updated_at: String,
 }
 
-impl From<checkpoint::Model> for CheckpointDto {
-    fn from(m: checkpoint::Model) -> Self {
+impl From<review::Model> for ReviewDto {
+    fn from(m: review::Model) -> Self {
         Self {
             id: m.id,
             task_id: m.task_id,
@@ -213,7 +213,7 @@ impl From<path_lock::Model> for PathLockDto {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ArtifactDto {
+pub struct OutputDto {
     pub id: String,
     pub task_id: String,
     pub run_id: Option<String>,
@@ -223,8 +223,8 @@ pub struct ArtifactDto {
     pub created_at: String,
 }
 
-impl From<artifact::Model> for ArtifactDto {
-    fn from(m: artifact::Model) -> Self {
+impl From<output::Model> for OutputDto {
+    fn from(m: output::Model) -> Self {
         Self {
             id: m.id,
             task_id: m.task_id,
@@ -243,9 +243,9 @@ pub struct TaskDetailDto {
     pub task: TaskDto,
     pub steps: Vec<TaskStepDto>,
     pub runs: Vec<TaskRunDto>,
-    pub checkpoints: Vec<CheckpointDto>,
+    pub reviews: Vec<ReviewDto>,
     pub path_locks: Vec<PathLockDto>,
-    pub artifacts: Vec<ArtifactDto>,
+    pub outputs: Vec<OutputDto>,
 }
 
 #[derive(Debug, Clone, Serialize)]

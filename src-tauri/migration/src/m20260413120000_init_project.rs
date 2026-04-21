@@ -87,7 +87,7 @@ fn schema_statements() -> &'static [&'static str] {
     expires_at TEXT,
     created_at TEXT NOT NULL
 );"#,
-        r#"CREATE TABLE IF NOT EXISTS checkpoints (
+        r#"CREATE TABLE IF NOT EXISTS reviews (
     id               TEXT PRIMARY KEY,
     task_id          TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
     status           TEXT NOT NULL DEFAULT 'open',
@@ -95,7 +95,7 @@ fn schema_statements() -> &'static [&'static str] {
     created_at       TEXT NOT NULL,
     updated_at       TEXT NOT NULL
 );"#,
-        r#"CREATE TABLE IF NOT EXISTS artifacts (
+        r#"CREATE TABLE IF NOT EXISTS outputs (
     id         TEXT PRIMARY KEY,
     task_id    TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
     run_id     TEXT REFERENCES task_runs(id) ON DELETE SET NULL,
@@ -110,15 +110,15 @@ fn schema_statements() -> &'static [&'static str] {
         "CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks (status);",
         "CREATE INDEX IF NOT EXISTS idx_task_steps_task_id ON task_steps (task_id);",
         "CREATE INDEX IF NOT EXISTS idx_task_runs_task_id ON task_runs (task_id);",
-        "CREATE INDEX IF NOT EXISTS idx_checkpoints_task_id ON checkpoints (task_id);",
-        "CREATE INDEX IF NOT EXISTS idx_artifacts_task_id ON artifacts (task_id);",
+        "CREATE INDEX IF NOT EXISTS idx_reviews_task_id ON reviews (task_id);",
+        "CREATE INDEX IF NOT EXISTS idx_outputs_task_id ON outputs (task_id);",
     ]
 }
 
 fn drop_statements() -> &'static [&'static str] {
     &[
-        "DROP TABLE IF EXISTS artifacts;",
-        "DROP TABLE IF EXISTS checkpoints;",
+        "DROP TABLE IF EXISTS outputs;",
+        "DROP TABLE IF EXISTS reviews;",
         "DROP TABLE IF EXISTS path_locks;",
         "DROP TABLE IF EXISTS task_runs;",
         "DROP TABLE IF EXISTS task_steps;",

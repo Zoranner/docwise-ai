@@ -331,7 +331,7 @@ project_tool!(
     TaskGetParams,
     { id: String },
     "task_get",
-    "Get task detail including steps, runs, checkpoints, locks, artifacts.",
+    "Get task detail including steps, runs, reviews, locks, outputs.",
     {
         "type": "object",
         "properties": { "id": { "type": "string" } },
@@ -527,7 +527,7 @@ impl Tool for TaskOpenCheckpointTool {
     async fn execute(&self, params: Value) -> ToolResult {
         let p: TaskOpenCheckpointParams = serde_json::from_value(params).map_err(invalid_params)?;
         let ctx = require_ctx(&self.state).await?;
-        let r = ops::task_open_checkpoint(&ctx.db, p.task_id, p.conversation_ref)
+        let r = ops::task_open_review(&ctx.db, p.task_id, p.conversation_ref)
             .await
             .map_err(db_tool_err)?;
         if let Some(b) = self.bridge.as_ref() {
@@ -570,7 +570,7 @@ impl Tool for TaskCloseCheckpointTool {
         let p: TaskCloseCheckpointParams =
             serde_json::from_value(params).map_err(invalid_params)?;
         let ctx = require_ctx(&self.state).await?;
-        let r = ops::task_close_checkpoint(&ctx.db, p.checkpoint_id)
+        let r = ops::task_close_review(&ctx.db, p.checkpoint_id)
             .await
             .map_err(db_tool_err)?;
         let task_status_after = ops::task_get(&ctx.db, r.task_id.clone())
@@ -631,7 +631,7 @@ project_tool!(
         run_id: Option<String>
     },
     "task_add_artifact",
-    "Record an artifact (kind: file, summary, report, reference, ...).",
+    "Record an output (kind: file, summary, report, reference, ...).",
     {
         "type": "object",
         "properties": {
@@ -836,7 +836,7 @@ async fn exec_task_release_lock(db: &DatabaseConnection, p: TaskReleaseLockParam
 }
 
 async fn exec_task_add_artifact(db: &DatabaseConnection, p: TaskAddArtifactParams) -> ToolResult {
-    let r = ops::task_add_artifact(db, p.task_id, p.kind, p.path, p.content, p.run_id)
+    let r = ops::task_add_output(db, p.task_id, p.kind, p.path, p.content, p.run_id)
         .await
         .map_err(db_tool_err)?;
     to_json(r)

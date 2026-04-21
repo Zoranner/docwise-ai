@@ -1,9 +1,11 @@
 use serde::Serialize;
 use tauri::State;
 
-use sea_orm::{sea_query::Expr, ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
+use sea_orm::{
+    sea_query::Expr, ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter, QuerySelect,
+};
 
-use crate::app::project::entity::{blueprint, checkpoint, task};
+use crate::app::project::entity::{blueprint, review, task};
 use crate::app::state::SharedProject;
 
 #[derive(Debug, Clone, Serialize)]
@@ -21,7 +23,7 @@ pub struct WorkspaceOverviewDto {
     pub focused: bool,
     pub task_by_status: Vec<StatusCountDto>,
     pub blueprint_by_status: Vec<StatusCountDto>,
-    pub open_checkpoints: u32,
+    pub open_reviews: u32,
 }
 
 async fn task_status_counts(
@@ -76,10 +78,11 @@ pub async fn session_workspaces_overview(
     for (wid, ctx) in &host.open {
         let db = &ctx.db;
         let task_by_status = task_status_counts(db).await.map_err(|e| e.to_string())?;
-        let blueprint_by_status =
-            blueprint_status_counts(db).await.map_err(|e| e.to_string())?;
-        let open_checkpoints = checkpoint::Entity::find()
-            .filter(checkpoint::Column::Status.eq("open"))
+        let blueprint_by_status = blueprint_status_counts(db)
+            .await
+            .map_err(|e| e.to_string())?;
+        let open_reviews = review::Entity::find()
+            .filter(review::Column::Status.eq("open"))
             .count(db)
             .await
             .map_err(|e| e.to_string())? as u32;
@@ -90,7 +93,7 @@ pub async fn session_workspaces_overview(
             focused: focused == Some(wid.as_str()),
             task_by_status,
             blueprint_by_status,
-            open_checkpoints,
+            open_reviews,
         });
     }
 
