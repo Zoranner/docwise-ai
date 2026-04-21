@@ -53,7 +53,7 @@ async function openCatalogEntry(path: string) {
   try {
     await invoke("workspace_open", { path });
     touchWorkspacePath(path);
-    await navigateTo("/workspace");
+    await navigateTo("/projects/overview");
   } catch (e) {
     openError.value = e instanceof Error ? e.message : String(e);
   }
@@ -66,11 +66,11 @@ async function openCatalogEntry(path: string) {
       <p
         class="text-primary mb-2 text-xs font-semibold tracking-widest uppercase"
       >
-        Workspace
+        Projects
       </p>
       <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl">项目中心</h1>
       <p class="docwise-section-desc mt-3">
-        登记常用本地目录，一键打开并进入工作台。清单保存在本机；后端会话内可同时挂载多个工作区并在工作台切换前台。
+        登记常用本地目录，一键打开并进入右侧监看区。清单保存在本机；左侧全局对话不绑定单个项目。
       </p>
     </header>
 
@@ -133,7 +133,7 @@ async function openCatalogEntry(path: string) {
         >
           <p>
             <strong class="text-default">总览</strong>
-            页的跨项目指标依赖后端聚合，当前为占位。
+            页的跨项目指标依赖后端聚合，当前先提供可用骨架。
           </p>
         </UCard>
       </aside>

@@ -7,17 +7,12 @@ const items = computed(() => {
     {
       to: "/projects",
       label: "项目",
-      active: p === "/projects",
+      active: p === "/projects" || /^\/projects\/(?!overview$)[^/]+/.test(p),
     },
     {
       to: "/projects/overview",
       label: "总览",
       active: p === "/projects/overview",
-    },
-    {
-      to: "/workspace",
-      label: "工作台",
-      active: p.startsWith("/workspace"),
     },
   ];
 });

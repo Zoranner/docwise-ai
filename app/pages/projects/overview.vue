@@ -16,7 +16,7 @@ onMounted(() => {
       </p>
       <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl">跨项目总览</h1>
       <p class="docwise-section-desc mt-3">
-        任务漏斗、检查点队列、蓝图状态等需后端跨多个
+        任务漏斗、审议队列、蓝图状态等需后端跨多个
         <code class="text-default bg-(--ui-bg-elevated) rounded px-1 py-0.5 text-xs"
           >project.db</code
         >
@@ -55,8 +55,7 @@ onMounted(() => {
       >
         <p class="text-muted text-xs font-medium uppercase">会话内工作区</p>
         <p class="text-muted mt-2 text-sm leading-relaxed">
-          在<strong class="text-default">工作台</strong
-          >顶栏查看与切换已打开目录。
+          打开项目后，在左侧全局对话指挥，在右侧监看区观察执行与结果。
         </p>
       </UCard>
     </div>
