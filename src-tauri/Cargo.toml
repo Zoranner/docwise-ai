@@ -54,6 +54,7 @@ lmkit = { path = "crates/lmkit-rs", default-features = false, features = [
 ] }
 async-trait = "0.1"
 futures = "0.3"
+dirs = "6"
 
 [features]
 default = ["custom-protocol"]

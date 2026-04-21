@@ -1,3 +1,4 @@
+pub mod catalog;
 pub mod checkpoint;
 pub mod commands;
 pub mod execution;

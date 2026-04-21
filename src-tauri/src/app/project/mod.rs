@@ -1,6 +1,6 @@
 mod context;
 pub mod dto;
-mod entity;
+pub mod entity;
 mod ops;
 pub mod params;
 pub mod tools;

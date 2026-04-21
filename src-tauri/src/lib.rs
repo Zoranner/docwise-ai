@@ -1,5 +1,7 @@
 mod app;
 
+use tauri::Manager;
+
 pub use app::checkpoint::{CheckpointBridge, CHECKPOINT_CHANGED_EVENT};
 pub use app::execution::{
     merge_planner_tool_list, run_agent_turn_stream, run_execution_turn_stream, run_planning_turn,
@@ -11,13 +13,28 @@ pub use app::execution::{
 pub use app::project::tools::{
     definitions_for_lmkit, executor_project_tools, planner_project_tools, preview_render_tool,
 };
+pub use app::catalog::SharedProjectCatalog;
 pub use app::state::{ActiveContext, SharedActiveContext, SharedProject, WorkspaceHost};
 
+use app::catalog::{self, CatalogFile};
 use app::commands;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .setup(|_app| {
+            let path = catalog::default_catalog_path()
+                .map_err(|msg| std::io::Error::new(std::io::ErrorKind::Other, msg))?;
+            let data = catalog::load_catalog_sync(&path).unwrap_or_else(|e| {
+                eprintln!("docwise: project catalog invalid ({e}), using empty catalog");
+                CatalogFile {
+                    version: 1,
+                    projects: vec![],
+                }
+            });
+            _app.manage(catalog::SharedProjectCatalog::new(path, data));
+            Ok(())
+        })
         .manage(SharedProject::default())
         .manage(SharedActiveContext::default())
         .invoke_handler(tauri::generate_handler![
@@ -30,6 +47,12 @@ pub fn run() {
             commands::workspace_focus,
             commands::workspace_close,
             commands::workspace_open,
+            commands::app_project_list,
+            commands::app_project_add,
+            commands::app_project_remove,
+            commands::app_project_update,
+            commands::app_project_open_workspace,
+            commands::session_workspaces_overview,
             commands::workspace_read_text_file,
             commands::workspace_write_text_file,
             commands::workspace_list_directory,

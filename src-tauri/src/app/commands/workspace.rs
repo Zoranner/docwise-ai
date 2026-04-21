@@ -93,6 +93,29 @@ pub async fn workspace_close(
     Ok(())
 }
 
+/// 使用已 `canonicalize` 的工作区根：插入或复用会话并设为前台，同步 [`ActiveContext`]。
+pub async fn workspace_open_canonical_root(
+    shared: &SharedProject,
+    active: &SharedActiveContext,
+    root: PathBuf,
+) -> Result<(), String> {
+    let wid = workspace_id_from_root(&root);
+    {
+        let mut host = shared.0.lock().await;
+        if host.open.contains_key(&wid) {
+            host.focused_workspace_id = Some(wid);
+        } else {
+            let ctx = ProjectContext::open(root.clone())
+                .await
+                .map_err(|e| format!("open project db: {e}"))?;
+            host.open.insert(wid.clone(), Arc::new(ctx));
+            host.focused_workspace_id = Some(wid);
+        }
+    }
+    *active.0.lock().await = ActiveContext::reset_for_workspace_root(&root);
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn workspace_open(
     state: State<'_, SharedProject>,
@@ -106,23 +129,7 @@ pub async fn workspace_open(
     let root = root
         .canonicalize()
         .map_err(|e| format!("canonicalize workspace: {e}"))?;
-    let wid = workspace_id_from_root(&root);
-
-    {
-        let mut host = state.0.lock().await;
-        if host.open.contains_key(&wid) {
-            host.focused_workspace_id = Some(wid);
-        } else {
-            let ctx = ProjectContext::open(root.clone())
-                .await
-                .map_err(|e| format!("open project db: {e}"))?;
-            host.open.insert(wid.clone(), Arc::new(ctx));
-            host.focused_workspace_id = Some(wid);
-        }
-    }
-
-    *active.0.lock().await = ActiveContext::reset_for_workspace_root(&root);
-    Ok(())
+    workspace_open_canonical_root(&state, &active, root).await
 }
 
 #[derive(Debug, Clone, Serialize)]

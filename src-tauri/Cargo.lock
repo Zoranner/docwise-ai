@@ -1152,6 +1152,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "comrak",
+ "dirs",
  "futures",
  "lmkit",
  "migration",
