@@ -34,7 +34,7 @@ pub enum AgentStreamError {
 impl std::fmt::Display for AgentStreamError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Lmkit(e) => write!(f, "{}", e.format_diagnostic()),
+            Self::Lmkit(e) => write!(f, "{}", e),
             Self::MaxToolRounds { limit } => {
                 write!(f, "agent stream exceeded max tool rounds ({limit})")
             }
@@ -160,12 +160,12 @@ where
                 Ok(s) => s,
                 Err(e) => {
                     if e.is_retryable() && attempt + 1 < max_attempts {
-                        last_reason = e.format_diagnostic();
+                        last_reason = e.to_string();
                         continue;
                     }
                     emit_ev(PlanningStreamEvent::Error {
                         code: "lmkit".into(),
-                        message: e.format_diagnostic(),
+                        message: e.to_string(),
                         partial_messages: Some(messages.iter().map(chat_to_wire).collect()),
                     });
                     return Err(AgentStreamError::from(e));
@@ -183,13 +183,13 @@ where
                     Ok(x) => x,
                     Err(e) => {
                         if e.is_retryable() && attempt + 1 < max_attempts {
-                            last_reason = e.format_diagnostic();
+                            last_reason = e.to_string();
                             abandon_stream_attempt = true;
                             break;
                         }
                         emit_ev(PlanningStreamEvent::Error {
                             code: "lmkit".into(),
-                            message: e.format_diagnostic(),
+                            message: e.to_string(),
                             partial_messages: Some(messages.iter().map(chat_to_wire).collect()),
                         });
                         return Err(AgentStreamError::from(e));

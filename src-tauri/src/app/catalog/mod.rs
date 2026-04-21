@@ -68,8 +68,7 @@ fn catalog_version() -> u32 {
 
 /// `%APPDATA%\Docwise\project_catalog.json`（Windows）或平台等价配置目录。
 pub fn default_catalog_path() -> Result<PathBuf, String> {
-    let base =
-        dirs::config_dir().ok_or_else(|| "could not resolve config directory".to_owned())?;
+    let base = dirs::config_dir().ok_or_else(|| "could not resolve config directory".to_owned())?;
     Ok(base.join("Docwise").join("project_catalog.json"))
 }
 

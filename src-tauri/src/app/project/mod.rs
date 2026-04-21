@@ -48,6 +48,9 @@ mod tests {
         assert!(!names.iter().any(|name| name == "checkpoints"));
         assert!(!names.iter().any(|name| name == "artifacts"));
 
+        drop(rows);
+        drop(ctx);
+
         tokio::fs::remove_dir_all(root).await.expect("cleanup root");
     }
 }

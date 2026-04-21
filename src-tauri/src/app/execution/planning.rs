@@ -71,7 +71,7 @@ pub enum PlanningAgentError {
 impl std::fmt::Display for PlanningAgentError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Lmkit(e) => write!(f, "{}", e.format_diagnostic()),
+            Self::Lmkit(e) => write!(f, "{}", e),
             Self::MaxToolRounds { limit, .. } => {
                 write!(f, "planning agent exceeded max tool rounds ({limit})")
             }

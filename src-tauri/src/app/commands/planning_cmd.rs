@@ -86,7 +86,7 @@ pub fn planning_agent_turn_stream(
                     seq: 1,
                     event: PlanningStreamEvent::Error {
                         code: "provider_init".into(),
-                        message: e.format_diagnostic(),
+                        message: e.to_string(),
                         partial_messages: None,
                     },
                 });

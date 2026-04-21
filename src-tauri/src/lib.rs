@@ -2,6 +2,7 @@ mod app;
 
 use tauri::Manager;
 
+pub use app::catalog::SharedProjectCatalog;
 pub use app::checkpoint::{CheckpointBridge, CHECKPOINT_CHANGED_EVENT};
 pub use app::execution::{
     merge_planner_tool_list, run_agent_turn_stream, run_execution_turn_stream, run_planning_turn,
@@ -13,7 +14,6 @@ pub use app::execution::{
 pub use app::project::tools::{
     definitions_for_lmkit, executor_project_tools, planner_project_tools, preview_render_tool,
 };
-pub use app::catalog::SharedProjectCatalog;
 pub use app::state::{ActiveContext, SharedActiveContext, SharedProject, WorkspaceHost};
 
 use app::catalog::{self, CatalogFile};
@@ -23,8 +23,7 @@ use app::commands;
 pub fn run() {
     tauri::Builder::default()
         .setup(|_app| {
-            let path = catalog::default_catalog_path()
-                .map_err(|msg| std::io::Error::new(std::io::ErrorKind::Other, msg))?;
+            let path = catalog::default_catalog_path().map_err(std::io::Error::other)?;
             let data = catalog::load_catalog_sync(&path).unwrap_or_else(|e| {
                 eprintln!("docwise: project catalog invalid ({e}), using empty catalog");
                 CatalogFile {
