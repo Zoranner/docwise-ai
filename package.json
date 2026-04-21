@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "postinstall": "nuxt prepare",
+    "test": "bun test",
     "format": "prettier --write .",
     "lint": "bunx --bun eslint .",
     "lint:fix": "bunx --bun eslint . --fix",

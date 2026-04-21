@@ -42,7 +42,7 @@ impl CheckpointBridge {
         {
             let mut a = self.active.0.lock().await;
             a.task_id = Some(cp.task_id.clone());
-            a.checkpoint_id = Some(cp.id.clone());
+            a.review_id = Some(cp.id.clone());
         }
         CheckpointChangedEvent {
             action: "opened",
@@ -55,8 +55,8 @@ impl CheckpointBridge {
     pub async fn notify_closed(&self, cp: &ReviewDto, task_status_after: Option<String>) {
         {
             let mut a = self.active.0.lock().await;
-            if a.checkpoint_id.as_deref() == Some(cp.id.as_str()) {
-                a.checkpoint_id = None;
+            if a.review_id.as_deref() == Some(cp.id.as_str()) {
+                a.review_id = None;
             }
             a.task_id = Some(cp.task_id.clone());
         }

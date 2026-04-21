@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { patchFocusContext } from "~/lib/focus-context";
 import type { ActiveContext } from "~/types/active-context";
 
 export function useDocwiseActiveContext() {
@@ -31,7 +32,7 @@ export function useDocwiseActiveContext() {
     if (!context.value) await refresh();
     const cur = context.value;
     if (!cur) return;
-    await replace({ ...cur, ...partial });
+    await replace(patchFocusContext(cur, partial));
   }
 
   return {

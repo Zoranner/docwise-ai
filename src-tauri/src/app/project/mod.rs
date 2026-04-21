@@ -13,7 +13,7 @@ pub use params::{BlueprintItemAddParams, BlueprintItemUpdateParams, TaskUpdatePa
 #[cfg(test)]
 mod tests {
     use super::ProjectContext;
-    use sea_orm::{ConnectionTrait, DbBackend, Statement, TryGetable};
+    use sea_orm::{ConnectionTrait, DbBackend, Statement};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     #[tokio::test]

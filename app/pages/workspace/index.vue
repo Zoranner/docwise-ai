@@ -25,7 +25,6 @@ const {
   context: activeContext,
   errorMessage: activeContextError,
   refresh: refreshActiveContext,
-  patch: patchActiveContext,
 } = useDocwiseActiveContext();
 
 const { lastCheckpointEvent } = useDocwiseCheckpointEvents(refreshActiveContext);
@@ -112,7 +111,6 @@ async function loadEditorFile() {
       path: rel,
     });
     editorRelPath.value = rel;
-    await patchActiveContext({ filePath: rel });
   } catch (e) {
     editorError.value = e instanceof Error ? e.message : String(e);
   } finally {
@@ -134,7 +132,6 @@ async function saveEditorFile() {
       content: editorContent.value,
     });
     editorRelPath.value = rel;
-    await patchActiveContext({ filePath: rel });
   } catch (e) {
     editorError.value = e instanceof Error ? e.message : String(e);
   } finally {
@@ -247,9 +244,6 @@ async function runAgentStream() {
 
 onMounted(async () => {
   await refreshActiveContext();
-  if (activeContext.value?.filePath) {
-    editorRelPath.value = activeContext.value.filePath;
-  }
   await refreshOpenSessions();
   try {
     workspaceResolvedPath.value = await invoke<string | null>(

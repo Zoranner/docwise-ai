@@ -37,17 +37,17 @@ impl Default for SharedProject {
     }
 }
 
-/// 与 [`docwise-design.md`](../../docs/docwise-design.md) 中 **ActiveContext** 一致：侧栏、看板、对话共享的导航上下文（内存态）。
+/// 与 [`docwise-design.md`](../../docs/docwise-design.md) 中 **ActiveContext** 一致：侧栏、监看区、对话共享的项目焦点上下文（内存态）。
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ActiveContext {
     /// 当前工作区标识；v1 使用规范化后的工作区根路径（统一 `/` 分隔符）。
     pub workspace_id: String,
-    pub file_path: Option<String>,
+    pub project_id: Option<String>,
     pub blueprint_id: Option<String>,
     pub task_id: Option<String>,
-    pub run_id: Option<String>,
-    pub checkpoint_id: Option<String>,
+    pub review_id: Option<String>,
+    pub output_id: Option<String>,
 }
 
 impl ActiveContext {
@@ -55,11 +55,11 @@ impl ActiveContext {
     pub fn reset_for_workspace_root(root: &Path) -> Self {
         Self {
             workspace_id: workspace_id_from_root(root),
-            file_path: None,
+            project_id: None,
             blueprint_id: None,
             task_id: None,
-            run_id: None,
-            checkpoint_id: None,
+            review_id: None,
+            output_id: None,
         }
     }
 }
@@ -82,5 +82,24 @@ impl SharedActiveContext {
 impl Default for SharedActiveContext {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::ActiveContext;
+
+    #[test]
+    fn reset_for_workspace_root_clears_focus_fields_but_keeps_workspace() {
+        let ctx = ActiveContext::reset_for_workspace_root(Path::new("E:/demo"));
+
+        assert_eq!(ctx.workspace_id, "E:/demo");
+        assert_eq!(ctx.project_id, None);
+        assert_eq!(ctx.blueprint_id, None);
+        assert_eq!(ctx.task_id, None);
+        assert_eq!(ctx.review_id, None);
+        assert_eq!(ctx.output_id, None);
     }
 }
