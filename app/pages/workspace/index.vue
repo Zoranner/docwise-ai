@@ -1,12 +1,28 @@
 <script setup lang="ts">
+import { definePageMeta, navigateTo } from "#imports";
+import { buildProjectEntryTarget } from "~/lib/project-entry";
+import { useProjectData } from "~/composables/useProjectData";
+import { useProjectWorkspaceState } from "~/composables/useProjectWorkspaceState";
+
 definePageMeta({ layout: false });
-await navigateTo("/projects/overview", { replace: true });
+
+const { projects } = useProjectData();
+const { selectedProjectId } = useProjectWorkspaceState();
+
+const target = buildProjectEntryTarget({
+  projectIds: projects.value.map((project) => project.id),
+  selectedProjectId: selectedProjectId.value,
+  tab: null,
+  tabPolicy: "blueprint",
+});
+
+if (target) {
+  await navigateTo(target, { replace: true });
+}
 </script>
 
 <template>
-  <div
-    class="text-muted flex min-h-dvh items-center justify-center bg-(--ui-bg) text-sm"
-  >
+  <div class="loading-state">
     工作台已并入项目总览，正在跳转…
   </div>
 </template>

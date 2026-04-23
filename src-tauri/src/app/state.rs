@@ -37,7 +37,7 @@ impl Default for SharedProject {
     }
 }
 
-/// 与 [`docwise-design.md`](../../docs/docwise-design.md) 中 **ActiveContext** 一致：侧栏、监看区、对话共享的项目焦点上下文（内存态）。
+/// 与 [`product-design.md`](../../docs/product-design.md) 中 **ActiveContext** 一致：侧栏、监看区、对话共享的项目焦点上下文（内存态）。
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ActiveContext {

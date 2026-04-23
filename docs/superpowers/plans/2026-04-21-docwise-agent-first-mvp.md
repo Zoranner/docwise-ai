@@ -94,9 +94,9 @@
 
 ### 文档
 
-- Modify: `docwise/docs/docwise-design.md`
-- Modify: `docwise/docs/docwise-ui-agent-first-design.md`
-- Modify: `docwise/docs/docwise-ui-shell-design.md`
+- Modify: `docwise/docs/product-design.md`
+- Modify: `docwise/docs/archive-ui-agent-first-design.md`
+- Modify: `docwise/docs/archive-ui-shell-design.md`
 
 ## Task 1: 统一领域命名与数据库真相
 
@@ -720,9 +720,9 @@ git commit -m "Integrate review flow into agent execution"
 - Modify: `docwise/app/pages/projects/overview.vue`
 - Modify: `docwise/app/pages/projects/index.vue`
 - Modify: `docwise/app/pages/workspace/index.vue`
-- Modify: `docwise/docs/docwise-design.md`
-- Modify: `docwise/docs/docwise-ui-agent-first-design.md`
-- Modify: `docwise/docs/docwise-ui-shell-design.md`
+- Modify: `docwise/docs/product-design.md`
+- Modify: `docwise/docs/archive-ui-agent-first-design.md`
+- Modify: `docwise/docs/archive-ui-shell-design.md`
 - Test: `docwise/app/lib/project-tabs.test.ts`
 - Test: `docwise/app/lib/focus-context.test.ts`
 
@@ -766,7 +766,7 @@ import { chromeNavItems } from "~/lib/chrome-nav";
 ```
 
 ```md
-<!-- docs/docwise-design.md -->
+<!-- docs/product-design.md -->
 - v0 不再以内置编辑器/预览器为产品核心
 - 右侧监看区以项目、蓝图、任务、审议、产出为主
 - 文件阅读与手动编辑由外部工具承担
@@ -793,7 +793,7 @@ Expected: all PASS。
 
 ```bash
 cd docwise
-git add app/pages/projects/overview.vue app/pages/projects/index.vue app/pages/workspace/index.vue app/components/AppChromeNav.vue app/lib/chrome-nav.ts app/lib/chrome-nav.test.ts docs/docwise-design.md docs/docwise-ui-agent-first-design.md docs/docwise-ui-shell-design.md
+git add app/pages/projects/overview.vue app/pages/projects/index.vue app/pages/workspace/index.vue app/components/AppChromeNav.vue app/lib/chrome-nav.ts app/lib/chrome-nav.test.ts docs/product-design.md docs/archive-ui-agent-first-design.md docs/archive-ui-shell-design.md
 git commit -m "Finalize agent-first MVP product shell for Docwise"
 ```
 

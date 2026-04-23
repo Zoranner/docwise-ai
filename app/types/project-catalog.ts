@@ -1,5 +1,5 @@
 /** 项目中心清单条目（仅存浏览器 localStorage，与宿主内已打开会话分离）。 */
-export type DocwiseProjectCatalogEntry = {
+export type ProjectCatalogEntry = {
   id: string;
   name: string;
   workspacePath: string;

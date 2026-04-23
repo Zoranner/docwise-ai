@@ -1,10 +1,11 @@
+<script setup lang="ts">
+import ShellLayout from "~/components/shell/Shell.vue";
+</script>
+
 <template>
-  <div
-    class="text-default bg-(--ui-bg) docwise-shell flex min-h-dvh flex-col antialiased"
-  >
-    <AppChromeNav />
-    <DocwiseShell>
+  <div class="app-frame">
+    <ShellLayout>
       <slot />
-    </DocwiseShell>
+    </ShellLayout>
   </div>
 </template>
